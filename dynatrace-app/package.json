@@ -1,0 +1,26 @@
+{
+  "name": "dql-investigator",
+  "version": "1.0.0",
+  "description": "Interactive DQL & DPL learning platform for Dynatrace AppEngine",
+  "private": true,
+  "scripts": {
+    "start": "dt-app run",
+    "build": "dt-app build",
+    "deploy": "dt-app deploy",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "@dynatrace/strato-components": "^1",
+    "@dynatrace/strato-design-tokens": "^1",
+    "@dynatrace/strato-icons": "^1",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@dynatrace/app-toolkit": "^1",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.0"
+  }
+}

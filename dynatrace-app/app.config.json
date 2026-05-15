@@ -1,0 +1,19 @@
+{
+  "name": "DQL Investigator",
+  "version": "1.0.0",
+  "id": "com.dynatrace.dql-investigator",
+  "description": "Interactive learning platform for mastering Dynatrace Query Language (DQL) and Dynatrace Pattern Language (DPL)",
+  "icon": "assets/icon.png",
+  "scopes": [
+    {
+      "name": "environment",
+      "permissions": [
+        "storage:logs:read",
+        "storage:bizevents:read",
+        "storage:spans:read",
+        "storage:events:read",
+        "metrics:read"
+      ]
+    }
+  ]
+}
