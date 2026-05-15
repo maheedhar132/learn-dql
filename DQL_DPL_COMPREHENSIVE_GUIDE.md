@@ -1,694 +1,902 @@
 # Dynatrace Query Language (DQL) & Pattern Language (DPL) - Comprehensive Guide
 
 **Created**: May 15, 2026  
+**Based on**: Official Dynatrace GRAIL Research  
 **Purpose**: End-to-end understanding of DQL and DPL for building Dynatrace Apps
 
 ---
 
 ## Table of Contents
 
-1. [DQL Overview](#dql-overview)
+1. [Dynatrace GRAIL Overview](#dynatrace-grail-overview)
 2. [DQL Fundamentals](#dql-fundamentals)
-3. [DQL Data Types](#dql-data-types)
-4. [DQL Commands](#dql-commands)
-5. [DQL Functions](#dql-functions)
-6. [DQL Operators](#dql-operators)
+3. [DQL Pipeline Architecture](#dql-pipeline-architecture)
+4. [Data Types](#data-types)
+5. [DQL Commands Reference](#dql-commands-reference)
+6. [DQL Functions Reference](#dql-functions-reference)
 7. [DQL Best Practices](#dql-best-practices)
-8. [DQL Use Cases](#dql-use-cases)
+8. [Real-World Examples](#real-world-examples)
 9. [Dynatrace Pattern Language (DPL)](#dynatrace-pattern-language-dpl)
 10. [Building Dynatrace Apps](#building-dynatrace-apps)
 
 ---
 
-## DQL Overview
+## Dynatrace GRAIL Overview
 
-### What is DQL?
+### What is GRAIL?
 
-Dynatrace Query Language (DQL) is a powerful, purpose-built query language designed to analyze and explore Dynatrace's extensive data platform (GRAIL - Dynatrace's data lakehouse).
+Dynatrace Grail is "The Grail™ data lakehouse at the heart of the Dynatrace platform," engineered for digital service telemetry at enormous scale.
 
-**Key Characteristics:**
-- **Declarative syntax** - Specify what you want, not how to get it
-- **Distributed & parallel processing** - Handles massive datasets efficiently
-- **SQL-like syntax** - Familiar to those with SQL experience, but optimized for observability
-- **Real-time capabilities** - Query live and historical data
-- **Composable queries** - Build complex queries from simpler components
+### Key Characteristics
 
-### Core Capabilities
+**Data Lakehouse Architecture**
+- Combines cost efficiency of data lakes with analytics capabilities of data warehouses
+- Speed via distributing queries across many parallel workers
+- Preserves connections across telemetry, risk signals, and business datasets
+- Maintains "a graph context with causal dependencies among data"
 
-- Query metrics, logs, events, and traces
-- Perform advanced analytics and aggregations
-- Extract and parse unstructured data
-- Join and correlate multiple data sources
-- Build custom dashboards and alerts
+**Storage Model**
+- **Immutable data storage**: once written, data stays frozen
+- Stored as atomic, unchangeable records
+- Bundled into chronologically ordered parcels (~1GB each)
+- Resides in distributed cloud object stores
+- **Always-hydrated zero-latency cold/hot storage** — no reloading delays
+- Datawarping technique fetches content without conventional indexes
+
+**Schema**
+- **Schemaless read-time model** — no upfront schema definition required
+- Tagging and schema definition become unnecessary
+- Context emerges automatically during intake
+- Blends graph connections, event streams, chronological metrics, and flexible NoSQL structures
 
 ---
 
 ## DQL Fundamentals
 
-### Basic Query Structure
+### What is DQL?
 
-```dql
-data_source
-| filter condition
-| select fields
-| aggregate
+DQL (Dynatrace Query Language) is built for processing **arbitrary event data**, requiring **no up-front description of the input data's schema**.
+
+It serves as an instrument for:
+- Investigating information
+- Recognizing trends
+- Spotting irregularities
+- Building statistical models
+- Other analytical tasks using material held within the Grail data layer
+
+### Pipeline Syntax
+
+```
+command | command | command ...
 ```
 
-### Query Anatomy
+Commands are separated by the pipe character `|`. Each command transforms the data stream.
 
-A DQL query consists of:
+### Recommended Command Ordering (Best Practices)
 
-1. **Data Source** - Where you get data from
-   ```dql
-   fetch events
-   fetch logs
-   fetch metrics
-   fetch spans
-   fetch relationships
-   ```
+1. **fetch / timeseries** — Start with data source, restrict time range directly here
+2. **filter / filterOut / search** — Reduce rows early (biggest performance win)
+3. **fieldsKeep / fieldsRemove / fieldsRename** — Narrow columns
+4. **parse / fieldsAdd** — Non-transformative enrichment
+5. **summarize / makeTimeseries** — Aggregation (before limit!)
+6. **sort** — Always place LAST for performance
+7. **limit** — Final cap
 
-2. **Pipe (`|`)** - Chains operations together
-
-3. **Commands** - Operations on the data
-   - Filtering
-   - Selection
-   - Aggregation
-   - Transformation
-   - Ordering
-   - Limiting
-
-4. **Functions** - Used within commands for data manipulation
-
-### Example Query
-
-```dql
-fetch logs
-| filter severity == "ERROR"
-| fields timestamp, content, host
-| sort timestamp desc
-| limit 100
-```
-
-### Key Concepts
-
-#### Data Source Types
-
-- **Metrics** - Time-series numeric data (CPU, memory, response time, etc.)
-- **Logs** - Unstructured text entries with timestamps
-- **Events** - Point-in-time occurrences (deployments, alerts, etc.)
-- **Spans** - Individual operation traces
-- **Relationships** - Entity relationships and topology
-
-#### Filtering
-
-Filter data based on conditions:
-
-```dql
-fetch logs
-| filter severity == "ERROR" and host == "prod-01"
-| filter response_time > 1000
-| filter timestamp > now() - 1h
-```
-
-#### Selection
-
-Choose which fields to return:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| select timestamp, host, value
-```
-
-#### Aggregation
-
-Combine data:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| summarize avg(value) by host
-```
-
-#### Transformation
-
-Modify or enrich data:
-
-```dql
-fetch logs
-| fields timestamp, content, severity
-| parse content as {string host}
-```
+**Critical Rules:**
+- "A shorter analysis window provides better performance"
+- "Avoid negations" — use inclusive conditions
+- Place smallest dataset on the right side of joins
+- Use `==` or `!=` for exact values, `~` for partial matches
+- **Sorting right after fetch kills performance**
 
 ---
 
-## DQL Data Types
+## DQL Pipeline Architecture
+
+### Field Naming Rules
+
+- Unicode characters supported
+- Must use backticks for names that conflict with keywords: `true`, `false`, `null`, `mod`, `and`, `or`, `xor`, `not`
+- Backtick escaping supported for problematic names: `` `and` ``
+
+### Parameter Types
+
+- **Required parameters** appear without brackets
+- **Optional parameters** appear in brackets `[ ]`
+- **Parameter groups** use curly braces `{ }`
+- **Multiple parameters** of the same type separated by commas
+
+---
+
+## Data Types
 
 ### Primitive Types
 
-| Type | Description | Examples |
-|------|-------------|----------|
-| `number` | Integers and floats | `42`, `3.14`, `-100` |
-| `string` | Text values | `"error"`, `'warning'` |
-| `bool` | Boolean values | `true`, `false` |
-| `timestamp` | Date and time | `2024-01-15T10:30:00Z` |
-| `duration` | Time intervals | `1h`, `30m`, `45s` |
+| Type | Description | Literals | Casting |
+|------|-------------|----------|---------|
+| **Boolean** | True/false values | `true`, `false` | `toBoolean()`, `asBoolean()` |
+| **Long** | 64-bit signed integer | `-2^63` to `2^63-1`, hex: `0xFF` | `toLong()`, `asLong()` |
+| **Double** | 64-bit float (IEEE 754) | `2.34`, `2.4e2` | `toDouble()`, `asDouble()` |
+| **String** | Text values | `"text"`, `"""multiline"""` | `toString()`, `asString()` |
+| **Timestamp** | Instant with nanosecond precision | ISO 8601 format | `toTimestamp()`, `asTimestamp()` |
+| **Duration** | Time interval | `1s`, `1m`, `1h`, `1d`, `1w`, `1M`, `1q`, `1y` | `toDuration()`, `asDuration()` |
+| **Timeframe** | Start and end timestamps | Pair of timestamps | `toTimeframe()`, `asTimeframe()` |
+| **IpAddress** | IPv4 or IPv6 address | `ip("192.168.1.1")` | `toIp()`, `asIp()` |
+| **UID** | 64/128-bit identifiers | `uid64()`, `uid128()` | `toUid()`, `asUid()` |
 
 ### Complex Types
 
-| Type | Description |
-|------|-------------|
-| `record` | Structured data with named fields |
-| `array` | Ordered collection of values |
-| `null` | Absence of value |
+| Type | Description | Example |
+|------|-------------|---------|
+| **Array** | Ordered collection | `array(1,2,3)`, access via `arr[0]` |
+| **Record** | Key-value pairs | `record(a=1, b="x")`, access via `r[key]` |
+| **Null** | Absence of value | Returned from failed casts/operations |
 
-### Type Conversion Functions
-
-```dql
-toString(number)     # number -> string
-toNumber(string)     # string -> number
-toInt(string)        # string -> int
-toFloat(string)      # string -> float
-toBool(string)       # string -> bool
-toString(timestamp)  # timestamp -> string
-```
-
-### Working with Types
+### Type Checking
 
 ```dql
-fetch logs
-| filter toNumber(response_time) > 1000
-| fields host, toString(timestamp) as time_str
+type(value)          # Returns type as text
+isNull(value)        # Is null?
+isNotNull(value)     # Is not null?
+isTrue(expr)         # Is true?
+isFalseOrNull(expr)  # Is false or null?
+isTrueOrNull(expr)   # Is true or null?
 ```
 
 ---
 
-## DQL Commands
+## DQL Commands Reference
 
-### 1. Data Source Commands
+### Data Source Commands
 
-#### fetch
+#### `fetch` — Load data
 
-Load data from the platform:
+Loads data from the specified resource. The starting point of every log/event/span pipeline.
 
+**Syntax:**
+```dql
+fetch dataObject [, bucket: bucket, …] [, from] [, to] [, timeframe] [, samplingRatio] [, scanLimitGBytes]
+```
+
+**Parameters:**
+- `dataObject` — data source: `logs`, `events`, `bizevents`, `spans`, `metrics`, `dt.entity.*`
+- `bucket` — narrows to specific containers; single name, list, or glob masks like `logs_365_*`
+- `from` — relative start time using duration literals (e.g., `-24h`, `now()-2h`)
+- `to` — relative end time; defaults to current time
+- `timeframe` — absolute time range as ISO string: `"2021-10-20T00:00:00Z/2021-10-28T12:00:00Z"`
+- `samplingRatio` — vertical sampling: `1` (default), `10`, `100`, `1000`, `10000`
+- `scanLimitGBytes` — caps uncompressed data read; default `500GB`, `-1` for unlimited
+
+**Examples:**
+```dql
+fetch logs, from: -24h
+fetch logs, from: -24h, to: -2h
+fetch events, timeframe: "2021-10-20T00:00:00Z/2021-10-28T12:00:00Z"
+fetch bizevents, from: -7d, samplingRatio: 100
+fetch spans, scanLimitGBytes: 100
+```
+
+#### `timeseries` — Load, filter, and aggregate metrics
+
+**CRITICAL:** This is how you work with metrics, NOT `fetch metrics`!
+
+Combines loading, filtering and aggregating metrics data into a time series output.
+
+**Syntax:**
+```dql
+timeseries [by:{ expression, … }] [, interval] [, bins] [, from] [, to] [, timeframe] [, time] [, spread] [, nonempty] [, scalar] [, filter] aggregation, …
+```
+
+**Key Parameters:**
+- `aggregation` (required) — numeric aggregation function
+- `time` (optional) — timestamp field; default `timestamp`, fallback `start_time`
+- `from` / `to` (optional) — start/end boundaries
+- `timeframe` (optional) — overall window; uses query timeframe if omitted
+- `bins` (optional, positive integer) — desired bucket count; default `120`; range 12-1500
+- `interval` (optional, positive duration) — bucket length; mutually exclusive with `bins`
+- `by` (optional) — expressions that split the series
+- `nonempty` (optional) — emits series even if no input exists
+- `scalar` (optional) — calculates single scalar across whole window
+- `filter` (optional) — filter condition for metric selection
+
+**Aggregation functions for timeseries:**
+- `sum(expression [, default] [, rate])`
+- `avg(expression [, default] [, rate])`
+- `min(expression [, default] [, rate])`
+- `max(expression [, default] [, rate])`
+- `median(expression [, weight] [, default] [, rate])`
+- `percentile(expression, percentile [, weight] [, default] [, rate])`
+- `count([default] [, rate])`
+- `countIf(expression [, default] [, rate])`
+- `countDistinctExact(expression [, default] [, rate])`
+- `countDistinctApprox(expression [, precision] [, default] [, rate])`
+
+**Examples:**
+```dql
+# Average CPU usage across all hosts
+timeseries usage = avg(dt.host.cpu.usage)
+
+# Average CPU by host (top 3)
+timeseries usage = avg(dt.host.cpu.usage, scalar:true), by:{dt.entity.host}
+
+# Per-second failure rate
+timeseries sum(dt.service.request.failure_count, rate:1s),
+    filter:{startsWith(endpoint.name, "/api/accounts")}
+
+# Host availability with default gap-fill
+timeseries availability = sum(dt.host.availability, default:0),
+    nonempty:true,
+    filter:{availability.state == "up"}
+
+# Multi-host disk availability
+timeseries avail = avg(dt.host.disk.avail), by:{dt.entity.host}, from:-24h
+```
+
+#### `metrics` — Retrieve metric series
+
+Retrieves metric series.
+
+#### `describe` — Describe schema
+
+Describes the on-read schema extraction definition for a given data object.
+
+**Syntax:** `describe dataObject`
+
+**Example:**
+```dql
+describe bizevents
+```
+
+#### `data` — Generate sample data
+
+Generates sample data during query runtime. Requires no incoming pipeline.
+
+**Syntax:** `data [ records ] [, json: json_string ]`
+
+**Examples:**
+```dql
+data record(name = "test", value = 1),
+     record(name = "demo", value = 2)
+| fieldsAdd doubled = value * 2
+
+data json: """{"name":"test","value":1}"""
+```
+
+#### `load` — Load external lookup files
+
+Loads data from external lookup files.
+
+**Syntax:** `load tabularFile [, offset]`
+
+**Example:**
+```dql
+load "/lookups/pricelist"
+```
+
+---
+
+### Filtering Commands
+
+#### `filter` — Keep matching records
+
+Keeps records matching a specified condition.
+
+**Syntax:** `filter condition`
+
+**Critical null handling:**
+- `filter not x` removes records where `x` is `null` (because `not null` = `null`, and filter keeps only `true`)
+- Use `isTrueOrNull()` to include nulls
+
+**Examples:**
+```dql
+fetch logs | filter loglevel == "ERROR"
+fetch logs | filter (loglevel == "SEVERE" or loglevel == "ERROR") and not endsWith(log.source, "audit.log")
+fetch logs | filter host == "prod-1" or host == "prod-2"
+fetch logs | filter k8s.namespace.name ~ "astro*"
+```
+
+#### `filterOut` — Remove matching records
+
+Removes records matching a specific condition.
+
+**Syntax:** `filterOut condition`
+
+**Critical null handling:**
+- `filterOut x` keeps records where `x` is `null`
+- Any null or non-boolean result causes the row to be retained
+
+**Examples:**
+```dql
+fetch logs | filterOut loglevel == "INFO"
+fetch logs | filterOut (loglevel == "NONE" or loglevel == "INFO")
+```
+
+#### `search` — Case-insensitive token matching
+
+Performs case-insensitive token matching across records.
+
+**Syntax:** `search condition`
+
+**Features:**
+- Search-bar-style exploration
+- Plain string literal scans every field
+- Restrict scan with `~` operator: `field ~ term`
+- Wildcards match zero or more characters inside a token
+- Wildcards do NOT function against numeric, IP, or UID fields
+- Inspects nested records and array elements
+- Can mix search tokens with standard comparison operators
+
+**Examples:**
+```dql
+fetch logs | search "timeout"
+fetch logs | search content ~ "error*"
+fetch logs | search "cart" and status >= 400
+```
+
+#### `dedup` — Remove duplicates
+
+Removes duplicates from a list of records.
+
+**Syntax:** `dedup expression, … [, sort:expr [asc|desc]]`
+
+**Examples:**
+```dql
+fetch logs | dedup log.source, sort:timestamp desc
+```
+
+---
+
+### Selection Commands
+
+#### `fields` / `fieldsKeep` — Keep only specified fields
+
+**Syntax:** `fields field, …`
+
+**Example:**
+```dql
+fetch logs | fields timestamp, loglevel, log.source, content
+```
+
+#### `fieldsAdd` — Add computed fields
+
+Evaluates an expression and appends or replaces a field.
+
+**Syntax:** `fieldsAdd field = expression, …`
+
+**Examples:**
+```dql
+fetch logs | fieldsAdd severity = if(loglevel == "ERROR", "CRITICAL", "WARNING")
+fetch logs | fieldsAdd hour = getHour(timestamp)
+```
+
+#### `fieldsRemove` — Remove fields
+
+**Syntax:** `fieldsRemove field, …`
+
+**Example:**
+```dql
+fetch logs | fieldsRemove dt.system.*, internal_id
+```
+
+#### `fieldsRename` — Rename fields
+
+**Syntax:** `fieldsRename oldName = newName, …`
+
+**Example:**
+```dql
+fetch logs | fieldsRename loglevel = level, log.source = source
+```
+
+---
+
+### Aggregation Commands
+
+#### `summarize` — Group and aggregate
+
+Groups together records that have the same values for a given field and aggregates them.
+
+**Syntax:** `summarize [field =] aggregation, … [, by:{[field =] expression, …}]`
+
+**Aggregation functions:**
+- `sum(expression)` — total
+- `avg(expression)` — mean
+- `min(expression)` — least value
+- `max(expression)` — greatest value
+- `median(expression [, weight])` — median
+- `percentile(expression, percentile [, weight])` — specified percentile (0-100)
+- `percentileFromSamples(expression, percentile [, originalCount])` — percentile from array
+- `percentRank(expression, value)` — percentile rank
+- `count()` — total record count
+- `countIf(expression)` — conditional count
+- `countDistinctExact(expression)` — exact cardinality (capped at 1M)
+- `countDistinctApprox(expression [, precision])` — approximate cardinality
+- `collectArray(expression)` — gathers values into array
+- `collectDistinct(expression)` — gathers distinct values into array
+- `takeAny(expression)` — any non-null value
+- `takeFirst(expression)` — initial value
+- `takeLast(expression)` — final value
+- `takeMin(expression)` — minimum value
+- `takeMax(expression)` — maximum value
+- `stddev(expression)` — standard deviation
+- `variance(expression)` — variance
+- `correlation(expr1, expr2)` — Pearson correlation
+
+**Examples:**
+```dql
+fetch logs | summarize count = count()
+fetch logs | summarize sum = sum(amount)
+fetch logs | summarize errors = countIf(loglevel == "ERROR"), by:{host, process_group}
+fetch logs | summarize count = count(), by:loglevel
+```
+
+#### `makeTimeseries` — Create time series
+
+Creates time series from data in the stream for charting.
+
+**Syntax:** 
+```dql
+makeTimeseries [by:{ expression, … }] [, interval] [, bins] [, from] [, to] [, timeframe] [, time] [, spread] [, nonempty] [, scalar] aggregation, …
+```
+
+**Key differences from `timeseries`:**
+- `timeseries` is for metrics data directly
+- `makeTimeseries` is for aggregating logs/events/spans into time buckets
+
+**Examples:**
+```dql
+fetch logs
+| makeTimeseries count = count(), by:loglevel, interval:5m
+
+fetch logs, from:-24h
+| filter loglevel == "ERROR"
+| makeTimeseries errors = count(), interval:30m, default:0
+
+fetch logs, from:-7d
+| makeTimeseries
+    count = count(),
+    highVolume = countIf(amount > 1000),
+    maxPrice = max(price),
+    by:accountId,
+    interval:1d
+```
+
+#### `fieldsSummary` — Field cardinality
+
+Calculates the cardinality of field values.
+
+**Syntax:** `fieldsSummary field, … [, topValues] [, extrapolateSamples]`
+
+**Example:**
+```dql
+fetch logs, samplingRatio: 10000
+| fieldsSummary dt.entity.host, topValues: 10, extrapolateSamples: true
+```
+
+---
+
+### Ordering Commands
+
+#### `sort` — Sort results
+
+Sorts the records.
+
+**Syntax:** `sort expression [asc|desc], …`
+
+**Critical:** Always place LAST for performance. Sorting right after `fetch` kills performance.
+
+**Examples:**
+```dql
+fetch logs | sort timestamp desc
+fetch logs | sort loglevel asc, timestamp desc
+```
+
+#### `limit` — Cap result count
+
+Limits the number of returned records.
+
+**Syntax:** `limit count`
+
+**Critical:** Must come AFTER summarize/makeTimeseries (otherwise produces incorrect groupings)
+
+**Example:**
+```dql
+fetch logs | sort timestamp desc | limit 100
+```
+
+---
+
+### Extraction and Parsing Commands
+
+#### `parse` — Extract structured data
+
+Parses a record field and puts the result into one or more fields as specified in the pattern.
+
+**Syntax:** `parse field, pattern`
+
+**Pattern forms:**
+- `STRUCTURE{...}:fieldname`
+- `JSON{...}:fieldname`
+- `KVP{...}:fieldname`
+- `$subpattern:fieldname`
+
+**Examples:**
+```dql
+fetch logs
+| parse content, "LD{DATA}:errortype"
+
+fetch logs
+| parse content, JSON:event
+
+fetch logs
+| parse content, KVP{LD:key'='(LONG:valueLong | STRING:valueStr)'; '?}:person
+```
+
+---
+
+### Structuring Commands
+
+#### `expand` — Expand arrays into rows
+
+Expands an array into separate records.
+
+**Syntax:** `expand arrayField`
+
+**Example:**
 ```dql
 fetch events
-fetch logs
-fetch metrics "builtin:host.cpu.usage"
-fetch spans
-fetch relationships
+| expand tags
 ```
 
-#### fetchEvents
+#### `flatten` / `fieldsFlatten` — Flatten nested fields
 
-Get events with specific entity types:
+Extracts/flattens fields from a nested record.
 
-```dql
-fetchEvents("type(\"APPLICATION\")")
-```
+**Syntax:** `fieldsFlatten recordField`
 
-### 2. Filtering Commands
+---
 
-#### filter
+### Join Commands
 
-Basic conditional filtering:
+#### `append` — Union with subquery
 
-```dql
-fetch logs
-| filter severity == "ERROR"
-| filter response_time > 1000
-```
+Appends records from a sub-query.
 
-#### filterOut
+**Syntax:** `append executionBlock`
 
-Inverse filtering (exclude):
-
+**Example:**
 ```dql
 fetch logs
-| filterOut severity == "DEBUG"
+| append [fetch events | filter event.type == "error"]
 ```
 
-### 3. Selection Commands
+#### `join` — Join two data sources
 
-#### select / fields
+Joins records from source and sub-query based on a condition.
 
-Choose columns:
+**Syntax:** `join joinTable [, kind], on: condition, … [, prefix] [, fields:{ [field, …] }] [, executionOrder]`
 
-```dql
-fetch logs | select timestamp, host, content
-fetch logs | fields timestamp, host, content
-```
+**Join kinds:**
+- `inner` (default) — output record whenever left matches right
+- `leftOuter` — all left records, matching right records; unmatched left rows have nulls on right
+- `outer` — matched and unmatched records from either or both sides
 
-#### rename
+**Best practices:**
+- Place smallest dataset on the right
+- Default to inner joins
+- Filter or select inside the right-side subquery
+- Right side capped at 128 MB
+- When both key values are `null`, records are NOT matched
 
-Rename fields:
-
-```dql
-fetch logs
-| fields timestamp, content
-| rename content -> message
-```
-
-### 4. Aggregation Commands
-
-#### summarize / stats
-
-Group and aggregate:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| summarize {
-    avg(value),
-    max(value),
-    count()
-  } by {host}
-```
-
-#### topK / bottomK
-
-Get top/bottom values:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| summarize avg(value) by host
-| topK(10, "avg(value)")
-```
-
-### 5. Ordering Commands
-
-#### sort / order
-
-Sort results:
-
+**Examples:**
 ```dql
 fetch logs
-| sort timestamp desc
-| sort severity asc, timestamp desc
+| join kind:leftOuter,
+    on:{host},
+    [fetch events | filter event.type == "error"]
+
+fetch bizevents
+| join kind:inner,
+    on:{dt.entity.host},
+    [fetch dt.entity.host]
+| summarize count = count(), by:host.name
 ```
 
-### 6. Limiting Commands
+#### `joinNested` — Join as nested array
 
-#### limit
+Adds matching results as an array of nested records.
 
-Restrict number of rows:
+**Syntax:** `joinNested alias = joinTable [, on: condition, …] [, fields:{ [field, …] }] [, executionOrder]`
 
+**Example:**
+```dql
+fetch dt.entity.process_group
+| joinNested services = [fetch dt.entity.service], on:{dt.entity.process_group}
+```
+
+#### `lookup` — Add fields by matching
+
+Adds fields from a subquery by matching fields between tables.
+
+**Syntax:** `lookup lookupTable [, sourceField] [, lookupField] [, prefix] [, fields:{ [field, …] }] [, executionOrder]`
+
+**Examples:**
 ```dql
 fetch logs
-| sort timestamp desc
-| limit 100
-```
+| lookup sourceField:host, lookupField:dt.entity.host,
+    [fetch dt.entity.host],
+    prefix:host.
 
-#### head / tail
-
-Get first/last N rows:
-
-```dql
-fetch logs | head 50
-fetch logs | tail 20
-```
-
-### 7. Extraction & Parsing Commands
-
-#### parse
-
-Extract structured data from strings:
-
-```dql
 fetch logs
-| parse content as {
-    string method,
-    string path,
-    int status_code
-  }
-```
-
-#### parseJson
-
-Extract JSON data:
-
-```dql
-fetch logs
-| parseJson content as payload
-| fields payload.user_id, payload.action
-```
-
-### 8. Transformation Commands
-
-#### fields (with expressions)
-
-Add computed fields:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| fields 
-    timestamp,
-    host,
-    value,
-    value * 2 as doubled_value
-```
-
-#### dedup
-
-Remove duplicates:
-
-```dql
-fetch logs
-| dedup host, content
-```
-
-### 9. Joining Commands
-
-#### join
-
-Combine multiple data sources:
-
-```dql
-fetch logs | join [
-  fetch events on host == entity.name
-]
-```
-
-#### append
-
-Combine results vertically:
-
-```dql
-fetch logs on host == "prod-01"
-| append [
-  fetch events on host == "prod-01"
-]
-```
-
-### 10. Structuring Commands
-
-#### expand
-
-Flatten nested arrays:
-
-```dql
-fetch logs
-| parseJson content as payload
-| expand payload.items
-```
-
-#### window / timeWindow
-
-Time-based operations:
-
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| timeWindow 1m
+| lookup sourceField:k8s.cluster.id, lookupField:id,
+    [fetch dt.entity.kubernetes_cluster],
+    fields:{name}
 ```
 
 ---
 
-## DQL Functions
+### Smartscape Commands
 
-### Aggregation Functions
+#### `smartscapeNodes` — Load topology nodes
 
-Used with `summarize`:
+Loads Smartscape nodes using a type pattern.
 
-```dql
-count()              # Number of records
-sum(field)          # Sum of values
-avg(field)          # Average value
-min(field)          # Minimum value
-max(field)          # Maximum value
-stdDev(field)       # Standard deviation
-percentile(field,p) # Percentile (0-100)
-```
+#### `smartscapeEdges` — Load topology edges
 
-Example:
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| summarize {
-    count(),
-    avg(value),
-    percentile(value, 95) as p95
-  } by host
-```
+Loads Smartscape edges using an edge type pattern.
 
-### Array Functions
+#### `traverse` — Traverse graph
 
-Manipulate arrays:
+Traverses source nodes to target nodes following edge types.
 
-```dql
-arraySize(array)
-arrayConcat(arr1, arr2)
-arrayFlat(array)
-arrayJoin(array, separator)
-arrayContains(array, element)
-arrayIndexOf(array, element)
-```
+---
 
-Example:
-```dql
-fetch logs
-| parseJson content as payload
-| fields arraySize(payload.items) as item_count
-```
+## DQL Functions Reference
 
-### String Functions
+### Aggregation Functions (24)
 
-Work with text:
+Used with `summarize`, `makeTimeseries`, or `timeseries`:
 
-```dql
-strlen(string)
-substring(string, start, length)
-toLower(string)
-toUpper(string)
-trim(string)
-replace(string, find, replace)
-contains(string, substring)
-startsWith(string, prefix)
-endsWith(string, suffix)
-split(string, delimiter)
-concat(str1, str2, ...)
-printf(format, args...)
-```
+| Function | Description |
+|----------|-------------|
+| `avg(expr)` | Mean |
+| `collectArray(expr)` | Gather into array |
+| `collectDistinct(expr)` | Gather distinct |
+| `correlation(e1, e2)` | Pearson correlation |
+| `count()` | Record count |
+| `countDistinctExact(expr)` | Exact cardinality (capped 1M) |
+| `countDistinctApprox(expr [, precision])` | Approximate cardinality |
+| `countIf(expr)` | Conditional count |
+| `max(expr)` | Maximum |
+| `median(expr [, weight])` | Median |
+| `min(expr)` | Minimum |
+| `percentile(expr, p [, weight])` | Percentile (0-100) |
+| `percentiles(expr, ...)` | Multiple percentiles |
+| `percentileFromSamples(expr, p)` | Percentile from array |
+| `percentRank(expr, value)` | Percentile rank |
+| `stddev(expr)` | Standard deviation |
+| `sum(expr)` | Sum |
+| `takeAny(expr)` | Any non-null value |
+| `takeFirst(expr)` | First value |
+| `takeLast(expr)` | Last value |
+| `takeMax(expr)` | Maximum value |
+| `takeMin(expr)` | Minimum value |
+| `variance(expr)` | Variance |
 
-Example:
-```dql
-fetch logs
-| filter contains(content, "error")
-| fields 
-    host,
-    toUpper(severity) as severity_upper,
-    substring(content, 0, 100) as content_preview
-```
+### String Functions (24)
 
-### Mathematical Functions
+| Function | Example |
+|----------|---------|
+| `concat(expr, ...)` | `concat(host, ":", port)` |
+| `contains(string, substring)` | `contains(content, "error")` |
+| `decodeUrl(string)` | `decodeUrl(url)` |
+| `encodeUrl(string)` | `encodeUrl(path)` |
+| `endsWith(string, suffix)` | `endsWith(log.source, ".log")` |
+| `escape(string)` | `escape(raw)` |
+| `getCharacter(string, index)` | `getCharacter(code, 0)` |
+| `indexOf(string, substring)` | `indexOf(content, "fail")` |
+| `jsonField(string, fieldName)` | `jsonField(content, "status")` |
+| `jsonPath(string, path)` | `jsonPath(content, "$.user.id")` |
+| `lastIndexOf(string, substring)` | `lastIndexOf(path, "/")` |
+| `levenshteinDistance(s1, s2)` | `levenshteinDistance(a, b)` |
+| `like(string, pattern)` | `like(name, "prod_%")` |
+| `lower(string)` | `lower(loglevel)` |
+| `matchesPattern(string, dplPattern)` | `matchesPattern(content, "INT:code")` |
+| `matchesPhrase(string, phrase)` | `matchesPhrase(content, "connection refused")` |
+| `parse(string, pattern)` | `parse(content, "INT:status")` |
+| `replaceString(string, old, new)` | `replaceString(host, "-", "_")` |
+| `splitString(string, delimiter)` | `splitString(tags, ",")` |
+| `startsWith(string, prefix)` | `startsWith(endpoint, "/api/")` |
+| `stringLength(string)` | `stringLength(content)` |
+| `substring(string, start [, end])` | `substring(content, 0, 100)` |
+| `trim(string)` | `trim(log.source)` |
+| `upper(string)` | `upper(loglevel)` |
 
-Numeric operations:
+### Conversion/Casting Functions (31)
 
-```dql
-abs(number)
-round(number)
-ceil(number)
-floor(number)
-sqrt(number)
-pow(number, exponent)
-log(number)
-log10(number)
-exp(number)
-min(n1, n2, ...)
-max(n1, n2, ...)
-```
+| Function | Example |
+|----------|---------|
+| `asArray(value)` | Yields array or null |
+| `asBoolean(value)` | Yields boolean or null |
+| `asDouble(value)` | Yields double or null |
+| `asLong(value)` | Yields long or null |
+| `asString(value)` | Yields string or null |
+| `asTimestamp(value)` | Yields timestamp or null |
+| `toArray(value)` | Cast to array |
+| `toBoolean(value)` | Cast to boolean |
+| `toDouble(value)` | `toDouble("3.14")` |
+| `toDuration(value)` | `toDuration("1h")` |
+| `toIp(value)` | `toIp("192.168.1.1")` |
+| `toLong(value)` | `toLong("42")` |
+| `toString(value)` | `toString(42)` |
+| `toTimestamp(value)` | `toTimestamp("2023-01-01")` |
+| `type(value)` | Returns data type as text |
 
-Example:
-```dql
-fetch metrics "builtin:host.memory.usage"
-| fields host, sqrt(value) as sqrt_value
-```
+### Time Functions (20)
 
-### Time Functions
+| Function | Example |
+|----------|---------|
+| `duration(value, unit)` | `duration(60, "s")` |
+| `formatTimestamp(ts [, ...])` | `formatTimestamp(ts, format:"yyyy-MM-dd")` |
+| `getDayOfMonth(ts [, tz])` | `getDayOfMonth(timestamp)` |
+| `getDayOfWeek(ts [, tz])` | `getDayOfWeek(timestamp)` |
+| `getDayOfYear(ts [, tz])` | `getDayOfYear(timestamp)` |
+| `getHour(ts [, tz])` | `getHour(timestamp)` |
+| `getMinute(ts [, tz])` | `getMinute(timestamp)` |
+| `getMonth(ts [, tz])` | `getMonth(timestamp)` |
+| `getSecond(ts [, tz])` | `getSecond(timestamp)` |
+| `getWeekOfYear(ts [, tz])` | `getWeekOfYear(timestamp)` |
+| `getYear(ts [, tz])` | `getYear(timestamp)` |
+| `now()` | Current timestamp |
+| `timeframe(from [, to])` | `timeframe(from:now()-2h)` |
+| `timestamp(year, month, ...)` | `timestamp(2023, 1, 1, 0, 0, 0)` |
+| `timestampFromUnixMillis(millis)` | Convert epoch ms |
+| `timestampFromUnixSeconds(secs)` | Convert epoch s |
+| `unixMillisFromTimestamp(ts)` | Convert to epoch ms |
+| `unixSecondsFromTimestamp(ts)` | Convert to epoch s |
 
-Handle timestamps and durations:
+### Array Functions (29)
 
-```dql
-now()                          # Current timestamp
-ago(duration)                  # Timestamp in the past
-dateAdd(timestamp, duration)   # Add duration to timestamp
-dateDiff(ts1, ts2)            # Difference between timestamps
-formatTime(timestamp, format)  # Format timestamp
-timestamp()                    # Current epoch time
-```
-
-Example:
-```dql
-fetch logs
-| filter timestamp > ago(1h)
-| fields timestamp, formatTime(timestamp, "yyyy-MM-dd HH:mm:ss") as formatted_time
-```
+| Function | Example |
+|----------|---------|
+| `array(...)` | `array(1, 2, 3)` |
+| `arrayAvg(array)` | Average of elements |
+| `arrayConcat(array, ...)` | Join arrays |
+| `arrayDistinct(array)` | Remove duplicates |
+| `arrayElement(array, index)` | `arrayElement(tags, 0)` |
+| `arrayFirst(array)` | First non-null |
+| `arrayFlatten(array)` | Flatten nested |
+| `arrayIndexOf(array, value)` | Find index |
+| `arrayMax(array)` | Largest number |
+| `arrayMin(array)` | Smallest number |
+| `arraySize(array)` | Count items |
+| `arraySort(array)` | Sort ascending |
+| `arraySum(array)` | Sum elements |
 
 ### Conditional Functions
 
-Control flow:
-
-```dql
-if(condition, true_value, false_value)
-case when cond1 then val1 when cond2 then val2 else val3 end
-coalesce(val1, val2, val3, ...)
-```
-
-Example:
-```dql
-fetch logs
-| fields 
-    host,
-    severity,
-    if(severity == "ERROR", "high", "low") as priority
-```
-
-### Conversion Functions
-
-Convert between types:
-
-```dql
-toString(value)
-toNumber(string)
-toInt(string)
-toFloat(string)
-toBool(string)
-toTimestamp(string)
-```
-
-### Hash Functions
-
-Generate hashes:
-
-```dql
-md5(string)
-sha1(string)
-sha256(string)
-```
-
-### Network Functions
-
-Process network data:
-
-```dql
-ipAddr(string)
-ipVersion(ipaddr)
-ipInSubnet(ipaddr, subnet)
-```
+| Function | Example |
+|----------|---------|
+| `coalesce(expr, ...)` | First non-null |
+| `if(condition, then, else)` | `if(x > 0, "pos", "neg")` |
 
 ### Boolean Functions
 
-Logical operations:
+| Function | Example |
+|----------|---------|
+| `isNull(value)` | Is null? |
+| `isNotNull(value)` | Is not null? |
+| `isTrue(expr)` | Is true? |
+| `isTrueOrNull(expr)` | Is true or null? |
+| `isFalseOrNull(expr)` | Is false or null? |
 
-```dql
-and(cond1, cond2)
-or(cond1, cond2)
-not(cond)
-```
+### Network/IP Functions (10)
 
----
+| Function | Example |
+|----------|---------|
+| `ip(string)` | `ip("10.0.0.1")` |
+| `ipIn(ip, network)` | `ipIn(addr, "10.0.0.0/8")` |
+| `ipIsPrivate(ip)` | Is private? |
+| `ipIsPublic(ip)` | Is public? |
+| `ipMask(ip, bits)` | Mask address |
+| `isIp(value)` | Is IPv4/v6? |
+| `isIpV4(value)` | Is IPv4? |
+| `isIpV6(value)` | Is IPv6? |
 
-## DQL Operators
+### Hash Functions (7)
 
-### Comparison Operators
+| Function | Example |
+|----------|---------|
+| `hashCrc32(string)` | CRC32 hash |
+| `hashMd5(string)` | MD5 hash |
+| `hashSha1(string)` | SHA-1 hash |
+| `hashSha256(expr)` | SHA-256 hash |
+| `hashSha512(expr)` | SHA-512 hash |
 
-```dql
-==    # Equal
-!=    # Not equal
-<     # Less than
-<=    # Less than or equal
->     # Greater than
->=    # Greater than or equal
-in    # Value in list
-```
+### Mathematical Functions (32)
 
-Example:
-```dql
-fetch logs
-| filter severity in ["ERROR", "CRITICAL"]
-| filter response_time >= 1000
-```
-
-### Logical Operators
-
-```dql
-and    # Both conditions true
-or     # Either condition true
-not    # Negate condition
-```
-
-Example:
-```dql
-fetch logs
-| filter (severity == "ERROR" or severity == "CRITICAL") and host == "prod-01"
-```
-
-### Arithmetic Operators
-
-```dql
-+      # Addition
--      # Subtraction
-*      # Multiplication
-/      # Division
-%      # Modulo
-```
-
-Example:
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| fields timestamp, host, value, value * 100 as percentage
-```
-
-### String Operators
-
-```dql
-+           # Concatenation
-contains    # Substring check
-matches     # Regex matching
-```
-
-Example:
-```dql
-fetch logs
-| fields message, message + " - from " + host as full_message
-| filter message matches "^ERROR.*"
-```
+| Function | Example |
+|----------|---------|
+| `abs(value)` | `abs(-5)` |
+| `ceil(value)` | `ceil(2.3)` |
+| `cos(angle)` | `cos(pi())` |
+| `exp(value)` | e^x |
+| `floor(value)` | `floor(2.9)` |
+| `log(value)` | Natural log |
+| `log10(value)` | Base-10 log |
+| `max(n1, n2, ...)` | Maximum |
+| `min(n1, n2, ...)` | Minimum |
+| `pi()` | π constant |
+| `power(base, exp)` | `power(2, 10)` |
+| `round(value [, decimals])` | `round(3.1415, 2)` |
+| `sin(angle)` | `sin(pi()/2)` |
+| `sqrt(value)` | `sqrt(16)` |
+| `tan(angle)` | `tan(pi()/4)` |
 
 ---
 
 ## DQL Best Practices
 
-### 1. Performance Optimization
+### Performance Optimization
 
 **Filter Early and Often**
 ```dql
 # Good - filter early
-fetch logs
-| filter timestamp > ago(1h)
-| filter severity == "ERROR"
-| parse content
+fetch logs, from: -1h
+| filter loglevel == "ERROR"
+| parse content as fields
 
-# Avoid - parsing all logs then filtering
+# Avoid - parsing all then filtering
 fetch logs
-| parse content
-| filter timestamp > ago(1h)
-| filter severity == "ERROR"
+| parse content as fields
+| filter loglevel == "ERROR"
 ```
 
 **Use Specific Time Ranges**
 ```dql
-# Good - specific time range
-fetch metrics "builtin:host.cpu.usage"
-| filter timestamp > ago(24h) and timestamp < now()
+# Good - explicit time range
+fetch logs, from: -24h, to: now()
 
 # Avoid - unbounded or very large time ranges
-fetch metrics "builtin:host.cpu.usage"
+fetch logs
 ```
 
 **Limit Results Early**
 ```dql
 fetch logs
+| filter loglevel == "ERROR"
 | sort timestamp desc
-| limit 1000
-| parse content
+| limit 100
 ```
 
-### 2. Data Quality
+**Avoid Negations**
+```dql
+# Good - inclusive
+fetch logs | filter loglevel == "ERROR" or loglevel == "CRITICAL"
+
+# Avoid - negation
+fetch logs | filterOut loglevel != "ERROR"
+```
+
+**Place Smallest Dataset on Right of Joins**
+```dql
+fetch logs
+| join [fetch events | filter event.type == "error"]
+```
+
+**Sort at the End**
+```dql
+# Good - sort after aggregation
+fetch logs
+| summarize count = count(), by:host
+| sort count desc
+
+# Avoid - sort early kills performance
+fetch logs
+| sort timestamp desc
+| summarize count = count(), by:host
+```
+
+### Data Quality
 
 **Handle Null Values**
 ```dql
@@ -697,118 +905,139 @@ fetch logs
 | fields host, coalesce(severity, "UNKNOWN") as severity
 ```
 
-**Validate Data Types**
+**Type Safety**
 ```dql
 fetch logs
-| filter response_time != null
-| fields host, toNumber(response_time) as response_time_ms
-```
-
-### 3. Query Clarity
-
-**Use Meaningful Field Names**
-```dql
-fetch metrics "builtin:host.cpu.usage"
-| summarize avg(value) as avg_cpu_usage by host
-| rename host -> hostname
-```
-
-**Document Complex Logic**
-```dql
-fetch logs
-| filter severity == "ERROR"
-| summarize {
-    count() as error_count,
-    count() / 1000 as errors_per_thousand
-  } by host
-```
-
-### 4. Composition
-
-**Build Reusable Queries**
-```dql
-# Base query
-fetch logs
-| filter timestamp > ago(1h)
-| filter severity == "ERROR"
-
-# Then extend it
-fetch logs
-| filter timestamp > ago(1h)
-| filter severity == "ERROR"
-| summarize count() by host
+| fieldsAdd response_time_ms = toLong(response_time)
+| filter response_time_ms != null
 ```
 
 ---
 
-## DQL Use Cases
+## Real-World Examples
 
-### 1. Error Analysis
+### Logs
 
+**Basic error filtering**
+```dql
+fetch logs, from: -24h
+| filter loglevel == "ERROR"
+| fields timestamp, loglevel, log.source, content
+| sort timestamp desc
+| limit 100
+```
+
+**Parse HTTP status codes**
 ```dql
 fetch logs
-| filter severity == "ERROR"
-| parse content as {
-    string error_code,
-    string stack_trace
-  }
-| summarize {
-    count() as error_count,
-    arrayJoin(arrayDistinct(host), ", ") as affected_hosts
-  } by error_code
+| filter dt.entity.process_group == "PROCESS_GROUP-123F4A56BCDA0EA9"
+| parse content, "LD 'HTTP_STATUS ' INT:httpstatus"
+| filter httpstatus >= 400
+| summarize count = count(), by:{httpstatus}
+```
+
+**Track user changes from audit logs**
+```dql
+fetch logs, from:now()-5m
+| filter endsWith(log.source, "change.log")
+| parse content, "TIMESTAMP('yyyy-MM-dd HH:mm:ss'):ts LD JSON:settings"
+| fieldsAdd type = settings[eventType], user = settings[userId]
+| filter in(type, array("UPDATE", "DELETE"))
+| summarize count = count(), by:{user, type}
+```
+
+### Metrics
+
+**Average CPU usage across hosts**
+```dql
+timeseries usage = avg(dt.host.cpu.usage)
+```
+
+**Average CPU by host (top 3)**
+```dql
+timeseries usage = avg(dt.host.cpu.usage, scalar:true), by:{dt.entity.host}
+| sort usage desc
+| limit 3
+```
+
+**Per-second failure rate**
+```dql
+timeseries sum(dt.service.request.failure_count, rate:1s),
+    filter:{startsWith(endpoint.name, "/api/accounts")}
+```
+
+**Host availability with gap-fill**
+```dql
+timeseries availability = sum(dt.host.availability, default:0),
+    nonempty:true,
+    filter:{availability.state == "up"}
+```
+
+### Business Events
+
+**Average trading dollar volume**
+```dql
+fetch bizevents, from:now()-24h
+| filter event.type == "com.easytrade.quick-buy" or event.type == "com.easytrade.long-buy"
+| summarize dollar_volume = avg(amount * price)
+```
+
+**Trading volume over time**
+```dql
+fetch bizevents, from:now()-24h
+| filter event.type == "com.easytrade.nginx.quick-sell"
+| makeTimeseries dollar_volume = sum(amount * price), interval:5m
+```
+
+### Events
+
+**Count actions per user**
+```dql
+fetch events, from:-24h
+| summarize
+    creates = countIf(event.type == "CREATE"),
+    updates = countIf(event.type == "UPDATE"),
+    deletes = countIf(event.type == "DELETE"),
+    by:{user, tenant}
+```
+
+### Spans
+
+**Error rate by service**
+```dql
+fetch spans, from:-1h
+| filter status.code == "ERROR"
+| summarize error_count = count(), by:{service.name}
 | sort error_count desc
 ```
 
-### 2. Performance Monitoring
-
+**Latency percentiles by endpoint**
 ```dql
-fetch metrics "builtin:service.requestCount.server"
-| filter timestamp > ago(1h)
-| summarize {
-    avg(value) as avg_requests,
-    percentile(value, 95) as p95_requests,
-    max(value) as peak_requests
-  } by {service.name, host}
+fetch spans, from:-1h
+| summarize
+    p50 = percentile(duration, 50),
+    p95 = percentile(duration, 95),
+    p99 = percentile(duration, 99),
+    by:{endpoint.name}
+| sort p95 desc
 ```
 
-### 3. User Activity Tracking
+### Joins & Lookups
 
+**Join logs with host entity**
 ```dql
 fetch logs
-| filter contains(content, "user_action")
-| parseJson content as event_data
-| summarize count() as action_count by {
-    event_data.user_id,
-    event_data.action_type
-  }
-| topK(100, "action_count")
+| join kind:leftOuter,
+    on:{host},
+    [fetch dt.entity.host]
 ```
 
-### 4. Anomaly Detection
-
+**Lookup host name from entities**
 ```dql
-fetch metrics "builtin:host.cpu.usage"
-| filter timestamp > ago(24h)
-| summarize {
-    avg(value) as avg_cpu,
-    stdDev(value) as std_cpu
-  } by host
-| fields host, avg_cpu, std_cpu, avg_cpu + (std_cpu * 2) as anomaly_threshold
-```
-
-### 5. Dependency Analysis
-
-```dql
-fetch spans
-| filter timestamp > ago(1h)
-| summarize {
-    count() as call_count,
-    percentile(duration, 95) as p95_duration
-  } by {
-    service_name,
-    called_service_name
-  }
-| filter call_count > 100
+fetch logs
+| lookup sourceField:host, lookupField:dt.entity.host,
+    [fetch dt.entity.host],
+    prefix:host.
 ```
 
 ---
@@ -819,81 +1048,54 @@ fetch spans
 
 Dynatrace Pattern Language (DPL) is a specialized language for extracting and parsing structured information from unstructured log data. It's used within DQL's `parse` command.
 
-### DPL Architecture
-
-DPL patterns define rules for matching and extracting data:
-
-1. **Literals** - Fixed strings to match
-2. **Matchers** - Pattern elements to capture data
-3. **Modifiers** - Control matching behavior
-4. **Sequences & Groups** - Combine patterns
-5. **Expressions** - Complex matching logic
-
-### Basic Pattern Structure
-
-```dpl
-matcher1 matcher2 matcher3 ...
-```
-
 ### Core Pattern Elements
 
-#### 1. String Literals
+#### String Patterns
 
 Match exact strings:
-
 ```dql
-fetch logs
-| parse content as {
-    "ERROR: " string message
-  }
+fetch logs | parse content, "ERROR: " string message
 ```
 
-#### 2. String Matchers
+#### Numeric Patterns
 
 ```dpl
-string name        # Match any string, capture to 'name'
-GREEDY string name # Match greedily (longest match)
+INT name        # Match integer
+LONG name       # Match long integer
+FLOAT name      # Match floating-point number
+DOUBLE name     # Match double
+NUMBER name     # Match any number
 ```
 
-#### 3. Numeric Matchers
+#### Positional Matchers
 
 ```dpl
-int count          # Match integer
-float value        # Match floating-point number
-number num         # Match any number
+SPACE           # One space
+ws              # Whitespace
+digit           # Single digit (0-9)
+letter          # Single letter (a-z, A-Z)
+CHAR name       # Any single character
 ```
 
-#### 4. Positional Matchers
+#### Time and Date Patterns
 
 ```dpl
-ws       # Whitespace
-digit    # Single digit (0-9)
-letter   # Single letter (a-z, A-Z)
-char     # Any single character
+DATE('format') name
+TIME('format') name
+TIMESTAMP('format') name
+hhmmss name
 ```
 
-#### 5. Time and Date Patterns
+#### Network Patterns
 
 ```dpl
-date date_var
-time time_var
-timestamp ts_var
-hhmmss time_var
+IPADDRESS name
+IPADDR name
+EMAIL name
+URL name
 ```
 
-#### 6. Network Patterns
-
-```dpl
-ipaddr ip_var        # IP address
-ipv4 ipv4_var        # IPv4 specifically
-ipv6 ipv6_var        # IPv6 specifically
-email email_var      # Email address
-url url_var          # URL
-```
-
-### Modifiers
-
-Control matching behavior:
+### Pattern Modifiers
 
 ```dpl
 LD              # Left delimiter - match to word boundary
@@ -903,107 +1105,55 @@ SPACE           # Treat as space
 NOCASE          # Case-insensitive
 ```
 
-Example:
+### Sequences and Alternatives
+
+**Sequences:**
 ```dql
 fetch logs
-| parse content as {
-    "[" string level:LD:RD "]",
-    string message
-  }
-```
-
-### Sequences and Groups
-
-#### Sequences
-
-Match patterns in order:
-
-```dql
-fetch logs
-| parse content as {
-    string app,
+| parse content, {
+    STRING app,
     "-",
-    int version,
+    INT version,
     "-",
-    string environment
+    STRING environment
   }
 ```
 
-#### Optional Groups
-
+**Alternatives (OR):**
 ```dql
 fetch logs
-| parse content as {
-    string service,
-    ("running" | "stopped") as status,
-    {
-        "since" timestamp start_time
-    }?
-  }
-```
-
-#### Alternatives (OR)
-
-```dql
-fetch logs
-| parse content as {
-    string app,
+| parse content, {
+    STRING app,
     ("ERROR" | "WARN" | "INFO") as level,
-    string message
+    STRING message
+  }
+```
+
+**Optional groups:**
+```dql
+fetch logs
+| parse content, {
+    STRING service,
+    {
+        "running" | "stopped"
+    }?
   }
 ```
 
 ### JSON Patterns
 
-Extract from JSON:
-
 ```dql
 fetch logs
-| parseJson content as {
-    string level,
-    string message,
-    object {
-        string user_id,
-        string action
-    } as context
-  }
-```
-
-### Array Patterns
-
-Match array elements:
-
-```dql
-fetch logs
-| parseJson content as {
-    array[object] items
-  }
-| expand items
-| fields items.id, items.name
+| parse content, "JSON:event"
+| fields event[status], event[code]
 ```
 
 ### Key-Value Patterns
 
-Extract from key-value pairs:
-
 ```dql
 fetch logs
-| parse content as {
-    kv kvpairs
-  }
-| fields kvpairs["error"], kvpairs["code"]
-```
-
-### Smartscape Integration
-
-Parse Dynatrace entity references:
-
-```dql
-fetch logs
-| parse content as {
-    entity host_entity,
-    string message
-  }
+| parse content, "KVP:kvpairs"
+| fields kvpairs[error], kvpairs[code]
 ```
 
 ---
@@ -1014,40 +1164,10 @@ fetch logs
 
 A Dynatrace App consists of:
 
-1. **Dashboard** - UI components and layouts
-2. **Data Layer** - DQL queries
-3. **Business Logic** - Processing and transformations
-4. **Configuration** - App settings and parameters
-
-### Example: Simple Monitoring App
-
-```dql
-# Query 1: System Health Overview
-fetch metrics "builtin:host.cpu.usage", 
-             "builtin:host.memory.usage"
-| filter timestamp > ago(1h)
-| summarize {
-    avg(value) as avg_value
-  } by {metric.name, host.name}
-
-# Query 2: Error Rate Trend
-fetch logs
-| filter timestamp > ago(24h)
-| filter severity == "ERROR"
-| summarize count() as error_count by {
-    bin(timestamp, 1h) as time_bucket,
-    host
-  }
-| sort time_bucket asc
-
-# Query 3: Top Affected Services
-fetch logs
-| filter timestamp > ago(1h)
-| filter severity in ["ERROR", "CRITICAL"]
-| parse content as {string service}
-| summarize count() as incident_count by service
-| topK(10, "incident_count")
-```
+1. **Dashboard** — UI components and layouts
+2. **Data Layer** — DQL queries
+3. **Business Logic** — Processing and transformations
+4. **Configuration** — App settings and parameters
 
 ### Query Organization
 
@@ -1059,27 +1179,47 @@ queries/
 └── dependency_tracking.dql
 ```
 
-### Caching Strategy
+### Example: Monitoring Dashboard
 
+**Query 1: Error Overview**
 ```dql
-# Pre-calculate frequently accessed metrics
-fetch metrics "builtin:host.cpu.usage"
-| filter timestamp > ago(1h)
-| summarize avg(value) as cached_avg by host
-| every 5m
+fetch logs, from: -1h
+| filter severity == "ERROR"
+| summarize {
+    count() as total_errors,
+    countDistinctExact(host) as affected_hosts
+  }
+```
+
+**Query 2: Error Trend**
+```dql
+fetch logs, from: -24h
+| filter severity == "ERROR"
+| makeTimeseries error_count = count(), interval:1h
+```
+
+**Query 3: Top Error Types**
+```dql
+fetch logs, from: -1h
+| filter severity == "ERROR"
+| parse content, "ERROR:{error_type}"
+| summarize count = count(), by:{error_type}
+| sort count desc
+| limit 10
 ```
 
 ### Performance Considerations
 
 1. **Query Optimization**
    - Filter by timestamp early
-   - Use specific metrics names
+   - Use specific field names
    - Limit aggregation dimensions
+   - Avoid expensive operations in filter conditions
 
-2. **Data Retention**
-   - Know your data retention policies
-   - Plan for historical data access
-   - Consider archival needs
+2. **Sampling**
+   - Use `samplingRatio` for large datasets
+   - Account for sampling in aggregations
+   - Store ratio in `dt.system.sampling_ratio`
 
 3. **Scalability**
    - Design queries for large datasets
@@ -1088,66 +1228,67 @@ fetch metrics "builtin:host.cpu.usage"
 
 ---
 
-## Key Learning Path for Building Apps
-
-1. **Basics** → Learn fetch, filter, select
-2. **Data Handling** → Understand parsing and transformations
-3. **Aggregations** → Master summarize and grouping
-4. **Advanced** → Joins, complex parsing, time windows
-5. **App Design** → Combine multiple queries into cohesive apps
-6. **Optimization** → Performance tuning and caching
-
----
-
 ## Quick Reference
 
-### Common Patterns
-
-**Last 1 hour of data:**
+**Fetch data:**
 ```dql
-fetch logs | filter timestamp > ago(1h)
+fetch logs, from: -24h
+fetch events, from: -7d
+fetch bizevents, from: -1h
+fetch spans, from: -1h
 ```
 
-**Group by time window:**
+**Query metrics:**
 ```dql
-fetch metrics
-| summarize avg(value) by bin(timestamp, 5m) as time_bucket
+timeseries usage = avg(dt.host.cpu.usage)
+timeseries sum(metric_name, rate:1s), by:{dimension}
 ```
 
-**Top N by metric:**
+**Filter:**
 ```dql
-fetch logs
-| summarize count() by host
-| topK(10, "count()")
+| filter loglevel == "ERROR"
+| filterOut loglevel == "DEBUG"
+| search "keyword"
 ```
 
-**Parse and extract:**
+**Transform:**
 ```dql
-fetch logs
-| parse content as {
-    string field1,
-    int field2,
-    string field3
-  }
+| fields timestamp, host, content
+| fieldsAdd severity = if(loglevel == "ERROR", "HIGH", "LOW")
+| parse content, "INT:code"
 ```
 
-**Join multiple sources:**
+**Aggregate:**
 ```dql
-fetch logs
-| join [fetch events on host == entity.name]
+| summarize count = count(), avg = avg(value), by:{host}
+| makeTimeseries count = count(), interval:5m
+```
+
+**Order & Limit:**
+```dql
+| sort timestamp desc
+| limit 100
+```
+
+**Join:**
+```dql
+| join [fetch events] on:{host}
 ```
 
 ---
 
-## Resources & Next Steps
+## Learning Path
 
-1. **Practice with Sample Data** - Use your Dynatrace environment
-2. **Build Simple Queries First** - Start with basic filters and selections
-3. **Gradually Add Complexity** - Master parsing, aggregations, then joins
-4. **Create Reusable Query Library** - Document common patterns
-5. **Test Performance** - Understand query behavior on your data
+1. **Basics** → Master fetch, filter, select, limit
+2. **Data Handling** → Learn parsing and field transformations
+3. **Aggregations** → Master summarize and grouping
+4. **Time Series** → Understand makeTimeseries and timeseries
+5. **Advanced** → Joins, complex parsing, window operations
+6. **App Design** → Combine multiple queries into apps
+7. **Optimization** → Performance tuning and best practices
 
 ---
 
-**Last Updated**: 2026-05-15  
-**Status**: Comprehensive Guide Complete
+**Last Updated**: May 15, 2026  
+**Source**: Official Dynatrace GRAIL Research  
+**Status**: Corrected and Complete
