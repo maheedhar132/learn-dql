@@ -1,5 +1,6 @@
 import React from 'react';
-import { Flex, Heading, Text } from '@dynatrace/strato-components-full';
+import { Flex } from '@dynatrace/strato-components/layouts';
+import { Heading, Text } from '@dynatrace/strato-components/typography';
 
 /**
  * Phase 1: Sandbox — free-form DQL query editor.

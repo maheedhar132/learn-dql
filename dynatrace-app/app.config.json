@@ -1,19 +1,39 @@
 {
-  "name": "DQL Investigator",
-  "version": "1.0.0",
-  "id": "com.dynatrace.dql-investigator",
-  "description": "Interactive learning platform for mastering Dynatrace Query Language (DQL) and Dynatrace Pattern Language (DPL)",
-  "icon": "assets/icon.png",
-  "scopes": [
-    {
-      "name": "environment",
-      "permissions": [
-        "storage:logs:read",
-        "storage:bizevents:read",
-        "storage:spans:read",
-        "storage:events:read",
-        "metrics:read"
-      ]
-    }
-  ]
+  "environmentUrl": "https://PLACEHOLDER.live.dynatrace.com",
+  "app": {
+    "name": "DQL Investigator",
+    "version": "1.0.0",
+    "id": "com.dynatrace.dql-investigator",
+    "description": "Interactive learning platform for mastering Dynatrace Query Language (DQL) and Dynatrace Pattern Language (DPL)",
+    "icon": "assets/icon.png",
+    "scopes": [
+      {
+        "name": "storage:logs:read",
+        "comment": "Read log records for DQL sandbox queries"
+      },
+      {
+        "name": "storage:events:read",
+        "comment": "Read Dynatrace event records"
+      },
+      {
+        "name": "storage:bizevents:read",
+        "comment": "Read business event records"
+      },
+      {
+        "name": "storage:spans:read",
+        "comment": "Read trace and span records"
+      },
+      {
+        "name": "storage:metrics:read",
+        "comment": "Read metric data via timeseries command"
+      },
+      {
+        "name": "environment-api:metrics:read",
+        "comment": "Read metric metadata and selectors"
+      }
+    ]
+  },
+  "build": {
+    "index": "ui/index.html"
+  }
 }

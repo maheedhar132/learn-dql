@@ -11,14 +11,22 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
-    "@dynatrace/strato-components": "^1",
-    "@dynatrace/strato-design-tokens": "^1",
-    "@dynatrace/strato-icons": "^1",
+    "@dynatrace/strato-components": "^1.14.0",
+    "@dynatrace/strato-components-preview": "^2.12.2",
+    "@dynatrace/strato-design-tokens": "^1.2.0",
+    "@dynatrace/strato-icons": "^1.24.0",
+    "@dynatrace-sdk/app-environment": "^1.1.4",
+    "@dynatrace-sdk/client-query": "^1.21.2",
+    "@dynatrace-sdk/react-hooks": "^1.6.0",
+    "@dynatrace-sdk/app-utils": "^1.1.0",
+    "@dynatrace-sdk/navigation": "^2.2.0",
+    "@dynatrace-sdk/error-handlers": "^1.0.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^6.22.2"
   },
   "devDependencies": {
-    "@dynatrace/app-toolkit": "^1",
+    "@dynatrace/app-scripts": "^4.16.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "typescript": "^5.4.0"

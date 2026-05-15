@@ -1,5 +1,6 @@
 import React from 'react';
-import { Flex, Heading, Text } from '@dynatrace/strato-components-full';
+import { Flex } from '@dynatrace/strato-components/layouts';
+import { Heading, Text } from '@dynatrace/strato-components/typography';
 
 /**
  * Phase 2: Visualize — animated step-by-step DQL transformations.

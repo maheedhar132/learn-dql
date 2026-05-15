@@ -1,7 +1,7 @@
 import React from 'react';
-import { Flex } from '@dynatrace/strato-components-full';
+import { Flex } from '@dynatrace/strato-components/layouts';
 import { TopNav } from './TopNav';
-import { useAppState } from '../hooks/useAppState';
+import { useLocation } from 'react-router-dom';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -12,10 +12,8 @@ interface AppShellProps {
  * content area. The nav bar is always visible; only the inner content scrolls.
  */
 export function AppShell({ children }: AppShellProps) {
-  const { currentPhase } = useAppState();
-
-  // Cases page uses a custom 3-pane layout that manages its own overflow
-  const isCasesActive = currentPhase === 'cases';
+  const { pathname } = useLocation();
+  const isCasesActive = pathname === '/cases';
 
   return (
     <Flex

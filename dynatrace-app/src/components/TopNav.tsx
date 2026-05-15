@@ -1,11 +1,9 @@
 import React from 'react';
-import {
-  Flex,
-  Button,
-  Text,
-  Tooltip,
-  Badge,
-} from '@dynatrace/strato-components-full';
+import { Flex } from '@dynatrace/strato-components/layouts';
+import { Button } from '@dynatrace/strato-components/buttons';
+import { Text } from '@dynatrace/strato-components/typography';
+import { Tooltip } from '@dynatrace/strato-components/feedback';
+import { Badge } from '@dynatrace/strato-components/containers';
 import {
   BookOpenIcon,
   TerminalIcon,
@@ -14,6 +12,7 @@ import {
   JoystickIcon,
   HomeIcon,
 } from '@dynatrace/strato-icons';
+import { useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import type { Phase } from '../types/app.types';
 
@@ -65,7 +64,8 @@ const NAV_ITEMS: NavItem[] = [
 
 export function TopNav() {
   const { state, navigate } = useAppContext();
-  const { currentPhase, caseProgress } = state;
+  const { caseProgress } = state;
+  const { pathname } = useLocation();
 
   const completedCases = Object.values(caseProgress).filter((p) => p.completed).length;
 
@@ -83,7 +83,7 @@ export function TopNav() {
       {/* Logo / Home */}
       <Tooltip text="Home" placement="bottom">
         <Button
-          variant={currentPhase === 'landing' ? 'emphasized' : 'default'}
+          variant={pathname === '/landing' ? 'emphasized' : 'default'}
           onClick={() => navigate('landing')}
           style={{ marginRight: '0.5rem' }}
         >
@@ -111,7 +111,7 @@ export function TopNav() {
 
       {/* Phase navigation */}
       {NAV_ITEMS.map((item) => {
-        const isActive = currentPhase === item.phase;
+        const isActive = pathname === `/${item.phase}`;
         return (
           <Tooltip key={item.phase} text={item.tooltip} placement="bottom">
             <Button

@@ -1,13 +1,9 @@
 import React, { useMemo } from 'react';
-import {
-  Flex,
-  Heading,
-  Text,
-  Button,
-  Badge,
-  Surface,
-  Tooltip,
-} from '@dynatrace/strato-components-full';
+import { Flex } from '@dynatrace/strato-components/layouts';
+import { Heading, Text } from '@dynatrace/strato-components/typography';
+import { Button } from '@dynatrace/strato-components/buttons';
+import { Badge, Surface } from '@dynatrace/strato-components/containers';
+import { Tooltip } from '@dynatrace/strato-components/feedback';
 import {
   BookOpenIcon,
   TerminalIcon,

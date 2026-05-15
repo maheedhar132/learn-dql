@@ -6,6 +6,7 @@ import React, {
   useCallback,
   type ReactNode,
 } from 'react';
+import { useNavigate as useRouterNavigate } from 'react-router-dom';
 import type {
   AppState,
   AppAction,
@@ -209,6 +210,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const routerNavigate = useRouterNavigate();
   const { progress, updateCaseProgress, completeCase: persistCompleteCase, updateGameScore: persistScore, addSandboxHistory } =
     usePersistedProgress();
 
@@ -224,7 +226,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((phase: Phase) => {
     dispatch({ type: 'NAVIGATE', payload: phase });
-  }, []);
+    routerNavigate(`/${phase}`);
+  }, [routerNavigate]);
 
   const openCase = useCallback((caseId: string) => {
     dispatch({ type: 'SET_CASE', payload: caseId });
