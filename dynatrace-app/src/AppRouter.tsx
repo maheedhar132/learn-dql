@@ -11,6 +11,7 @@ const CasesPage      = React.lazy(() => import('./pages/CasesPage').then(m => ({
 const ArcadePage     = React.lazy(() => import('./pages/ArcadePage').then(m => ({ default: m.ArcadePage })));
 
 import { Flex, ProgressCircle } from '@dynatrace/strato-components-full';
+import { AppShell } from './components/AppShell';
 
 function PageLoader() {
   return (
@@ -28,13 +29,15 @@ export function AppRouter() {
   const { currentPhase } = useAppState();
 
   return (
-    <React.Suspense fallback={<PageLoader />}>
-      {currentPhase === 'landing'   && <LandingPage />}
-      {currentPhase === 'codex'     && <CodexPage />}
-      {currentPhase === 'sandbox'   && <SandboxPage />}
-      {currentPhase === 'visualize' && <VisualizePage />}
-      {currentPhase === 'cases'     && <CasesPage />}
-      {currentPhase === 'arcade'    && <ArcadePage />}
-    </React.Suspense>
+    <AppShell>
+      <React.Suspense fallback={<PageLoader />}>
+        {currentPhase === 'landing'   && <LandingPage />}
+        {currentPhase === 'codex'     && <CodexPage />}
+        {currentPhase === 'sandbox'   && <SandboxPage />}
+        {currentPhase === 'visualize' && <VisualizePage />}
+        {currentPhase === 'cases'     && <CasesPage />}
+        {currentPhase === 'arcade'    && <ArcadePage />}
+      </React.Suspense>
+    </AppShell>
   );
 }
