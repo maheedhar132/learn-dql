@@ -67,9 +67,9 @@ function TaskPanel({
   const solution = pipelineToQuery(task.expectedPipeline);
 
   const borderColor = passed
-    ? Colors.Background.Container.Success.Default
+    ? Colors.Charts.Threshold.Good.Default
     : state.result && !passed
-    ? Colors.Background.Container.Critical.Default
+    ? Colors.Charts.Threshold.Bad.Default
     : "transparent";
 
   return (
@@ -81,8 +81,8 @@ function TaskPanel({
     >
       <Flex flexDirection="column" padding={16} gap={12}>
         {/* Task header */}
-        <Flex alignItems="center" gap={10}>
-          <Chip color={passed ? "success" : "default"}>
+        <Flex alignItems="center" gap={12}>
+          <Chip color={passed ? "success" : "neutral"}>
             {passed ? "✓ Solved" : `Task ${index + 1}`}
           </Chip>
           <Paragraph style={{ fontWeight: 600, margin: 0 }}>{task.question}</Paragraph>
@@ -133,10 +133,10 @@ function TaskPanel({
             <Paragraph
               style={{
                 color: passed
-                  ? Colors.Background.Container.Success.Default
+                  ? Colors.Charts.Threshold.Good.Default
                   : state.result.message.startsWith("Exploring")
                   ? undefined
-                  : Colors.Background.Container.Critical.Default,
+                  : Colors.Charts.Threshold.Bad.Default,
                 fontWeight: 500,
                 fontSize: "0.875rem",
               }}
@@ -226,7 +226,7 @@ export const LogHuntPlayer = () => {
 
       {/* Story block */}
       <Surface>
-        <Flex flexDirection="column" padding={20} gap={10}>
+        <Flex flexDirection="column" padding={16} gap={12}>
           <Heading level={3} style={{ margin: 0 }}>The Briefing</Heading>
           <Paragraph>{scenario.story}</Paragraph>
         </Flex>
@@ -234,7 +234,7 @@ export const LogHuntPlayer = () => {
 
       {/* Investigation block */}
       <Surface>
-        <Flex flexDirection="column" padding={20} gap={10}>
+        <Flex flexDirection="column" padding={16} gap={12}>
           <Heading level={3} style={{ margin: 0 }}>Your Investigation</Heading>
           <Paragraph>{scenario.investigation}</Paragraph>
         </Flex>
