@@ -21,6 +21,23 @@ export const Sandbox = () => {
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
 
+  function runWithQuery(q: string) {
+    setOutcome(runQuery(q, SAMPLE));
+  }
+
+  function onQueryModify(action: "summarize" | "filter", fieldName: string, filterValue?: string) {
+    let newQuery: string;
+    if (action === "filter" && filterValue) {
+      newQuery = query ? `${query} | filter ${fieldName} ${filterValue}` : `fetch logs | filter ${fieldName} ${filterValue}`;
+    } else if (action === "summarize") {
+      newQuery = query ? `${query} | summarize count(), by:{${fieldName}}` : `fetch logs | summarize count(), by:{${fieldName}}`;
+    } else {
+      return;
+    }
+    setQuery(newQuery);
+    runWithQuery(newQuery);
+  }
+
   return (
     <Flex flexDirection="column" padding={32} gap={16}>
       <Flex flexDirection="column" gap={4}>
@@ -33,7 +50,7 @@ export const Sandbox = () => {
 
       <DQLEditor value={query} onChange={(v) => setQuery(v)} />
       <Flex>
-        <Button variant="accent" onClick={() => setOutcome(runQuery(query, SAMPLE))}>
+        <Button variant="accent" onClick={() => runWithQuery(query)}>
           Run query
         </Button>
       </Flex>
@@ -52,6 +69,7 @@ export const Sandbox = () => {
               <ResultTable
                 records={outcome.records}
                 columns={outcome.columns}
+                onQueryModify={onQueryModify}
               />
             </>
           )}
