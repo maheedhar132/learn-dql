@@ -68,6 +68,24 @@ export const CasePlayer = () => {
     }
   }
 
+  function onQueryModify(
+    action: "summarize" | "filter",
+    fieldName: string,
+    filterValue?: string,
+  ) {
+    if (action === "filter" && filterValue) {
+      const newQuery = query
+        ? `${query} | filter ${fieldName} ${filterValue}`
+        : `fetch logs | filter ${fieldName} ${filterValue}`;
+      setQuery(newQuery);
+    } else if (action === "summarize") {
+      const newQuery = query
+        ? `${query} | summarize count = count(), by:{${fieldName}}`
+        : `fetch logs | summarize count = count(), by:{${fieldName}}`;
+      setQuery(newQuery);
+    }
+  }
+
   return (
     <Flex flexDirection="column" padding={32} gap={20}>
       <Flex flexDirection="column" gap={4}>
@@ -166,6 +184,7 @@ export const CasePlayer = () => {
               <ResultTable
                 records={result.userOutcome.records}
                 columns={result.userOutcome.columns}
+                onQueryModify={onQueryModify}
               />
             </Flex>
           )}

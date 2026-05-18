@@ -3,7 +3,6 @@ import { DataTable } from "@dynatrace/strato-components-preview/tables";
 import { Paragraph, Text } from "@dynatrace/strato-components/typography";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { EllipsisIcon } from "@dynatrace/strato-icons";
 import type { DQLRecord, DQLColumn } from "../lib/types/dql";
 
 interface ResultTableProps {
@@ -42,52 +41,10 @@ export const ResultTable = ({
     () =>
       columns.map((c) => ({
         id: c.name,
-        header: (
-          <Flex alignItems="center" gap={8} style={{ position: "relative" }}>
-            <span>{c.name} ({c.type})</span>
-            {onQueryModify && (
-              <div style={{ position: "relative" }}>
-                <Button
-                  variant="tertiary"
-                  size="compact"
-                  onClick={() => setActivePopover(activePopover === `col-${c.name}` ? null : `col-${c.name}`)}
-                  style={{ padding: "2px 4px" }}
-                  title="Column options"
-                >
-                  <EllipsisIcon />
-                </Button>
-                {activePopover === `col-${c.name}` && (
-                  <Surface
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      right: 0,
-                      zIndex: 1000,
-                      minWidth: "200px",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                    }}
-                  >
-                    <Flex flexDirection="column" gap={4} padding={8}>
-                      <Button
-                        variant="secondary"
-                        size="compact"
-                        onClick={() => {
-                          onQueryModify("summarize", c.name);
-                          setActivePopover(null);
-                        }}
-                      >
-                        Summarize by {c.name}
-                      </Button>
-                    </Flex>
-                  </Surface>
-                )}
-              </div>
-            )}
-          </Flex>
-        ),
+        header: c.name,
         accessor: c.name,
       })),
-    [columns, activePopover, onQueryModify],
+    [columns],
   );
 
   const data = useMemo(
@@ -97,18 +54,20 @@ export const ResultTable = ({
         for (const c of columns) {
           const cellValue = display(r[c.name]);
           row[c.name] = onQueryModify ? (
-            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "4px" }}>
+            <div style={{ position: "relative", display: "inline-block" }}>
               <Button
-                variant="tertiary"
-                size="compact"
+                variant="default"
                 onClick={() => setActivePopover(activePopover === `cell-${rowIdx}-${c.name}` ? null : `cell-${rowIdx}-${c.name}`)}
                 style={{
-                  padding: "2px 6px",
+                  padding: "4px 8px",
                   fontSize: "0.875rem",
                   textAlign: "left",
                   whiteSpace: "normal",
                   wordBreak: "break-word",
-                  maxWidth: "150px",
+                  maxWidth: "200px",
+                  background: "transparent",
+                  border: "1px solid #e0e0e0",
+                  cursor: "pointer",
                 }}
                 title="Click for filter options"
               >
@@ -121,31 +80,32 @@ export const ResultTable = ({
                     top: "100%",
                     left: 0,
                     zIndex: 1000,
-                    minWidth: "200px",
+                    minWidth: "220px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                    marginTop: "4px",
                   }}
                 >
                   <Flex flexDirection="column" gap={4} padding={8}>
-                    <Text size="small" style={{ fontWeight: 600 }}>
+                    <Text style={{ fontWeight: 600, fontSize: "0.875rem" }}>
                       Filter "{c.name}"
                     </Text>
                     <Button
-                      variant="secondary"
-                      size="compact"
+                      variant="default"
                       onClick={() => {
                         onQueryModify("filter", c.name, `== "${cellValue}"`);
                         setActivePopover(null);
                       }}
+                      style={{ fontSize: "0.875rem", justifyContent: "flex-start" }}
                     >
-                      Equal to
+                      Equal to: {String(cellValue).substring(0, 30)}
                     </Button>
                     <Button
-                      variant="secondary"
-                      size="compact"
+                      variant="default"
                       onClick={() => {
                         onQueryModify("filter", c.name, `!= "${cellValue}"`);
                         setActivePopover(null);
                       }}
+                      style={{ fontSize: "0.875rem", justifyContent: "flex-start" }}
                     >
                       Not equal to
                     </Button>
