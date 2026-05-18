@@ -28,9 +28,9 @@ export const Sandbox = () => {
   function onQueryModify(action: "summarize" | "filter", fieldName: string, filterValue?: string) {
     let newQuery: string;
     if (action === "filter" && filterValue) {
-      newQuery = query ? `${query} | filter ${fieldName} ${filterValue}` : `fetch logs | filter ${fieldName} ${filterValue}`;
+      newQuery = query ? `${query}\n| filter ${fieldName} ${filterValue}` : `fetch logs\n| filter ${fieldName} ${filterValue}`;
     } else if (action === "summarize") {
-      newQuery = query ? `${query} | summarize count(), by:{${fieldName}}` : `fetch logs | summarize count(), by:{${fieldName}}`;
+      newQuery = query ? `${query}\n| summarize count(), by:{${fieldName}}` : `fetch logs\n| summarize count(), by:{${fieldName}}`;
     } else {
       return;
     }

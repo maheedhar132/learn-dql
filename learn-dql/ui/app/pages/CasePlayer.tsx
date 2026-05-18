@@ -88,12 +88,12 @@ export const CasePlayer = () => {
     let newQuery: string;
     if (action === "filter" && filterValue) {
       newQuery = query
-        ? `${query} | filter ${fieldName} ${filterValue}`
-        : `fetch logs | filter ${fieldName} ${filterValue}`;
+        ? `${query}\n| filter ${fieldName} ${filterValue}`
+        : `fetch logs\n| filter ${fieldName} ${filterValue}`;
     } else if (action === "summarize") {
       newQuery = query
-        ? `${query} | summarize count(), by:{${fieldName}}`
-        : `fetch logs | summarize count(), by:{${fieldName}}`;
+        ? `${query}\n| summarize count(), by:{${fieldName}}`
+        : `fetch logs\n| summarize count(), by:{${fieldName}}`;
     } else {
       return;
     }
