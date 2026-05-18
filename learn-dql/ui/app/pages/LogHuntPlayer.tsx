@@ -67,7 +67,7 @@ function TaskPanel({
   const solution = pipelineToQuery(task.expectedPipeline);
 
   const borderColor = passed
-    ? Colors.Charts.Threshold.Good.Default
+    ? Colors.Background.Container.Success.Default
     : state.result && !passed
     ? Colors.Charts.Threshold.Bad.Default
     : "transparent";
@@ -133,7 +133,7 @@ function TaskPanel({
             <Paragraph
               style={{
                 color: passed
-                  ? Colors.Charts.Threshold.Good.Default
+                  ? Colors.Background.Container.Success.Default
                   : state.result.message.startsWith("Exploring")
                   ? undefined
                   : Colors.Charts.Threshold.Bad.Default,
