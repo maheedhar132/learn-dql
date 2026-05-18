@@ -15,6 +15,7 @@ import Colors from "@dynatrace/strato-design-tokens/colors";
 import { ALL_SCENARIOS } from "../lib/dql";
 import {
   validateStep,
+  runQuery,
   pipelineToQuery,
   type ValidationResult,
 } from "../lib/validate";
@@ -31,6 +32,7 @@ export const CasePlayer = () => {
   const [stepIndex, setStepIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
+  const [isExploration, setIsExploration] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [showSolution, setShowSolution] = useState(false);
 
@@ -40,6 +42,7 @@ export const CasePlayer = () => {
   useEffect(() => {
     setQuery("");
     setResult(null);
+    setIsExploration(false);
     setShowHint(false);
     setShowSolution(false);
   }, [stepIndex, caseId]);
@@ -59,13 +62,18 @@ export const CasePlayer = () => {
   const passed = result?.passed ?? false;
   const isLastStep = stepIndex === scenario.steps.length - 1;
 
-  function onRun() {
+  function runWithQuery(q: string) {
     if (!step || !scenario) return;
-    const v = validateStep(query, step.expectedPipeline, step.sampleData);
+    setIsExploration(false);
+    const v = validateStep(q, step.expectedPipeline, step.sampleData);
     setResult(v);
     if (v.passed) {
       markStepComplete(scenario.id, stepIndex, scenario.steps.length);
     }
+  }
+
+  function onRun() {
+    runWithQuery(query);
   }
 
   function onQueryModify(
@@ -73,17 +81,29 @@ export const CasePlayer = () => {
     fieldName: string,
     filterValue?: string,
   ) {
+    if (!step) return;
+    let newQuery: string;
     if (action === "filter" && filterValue) {
-      const newQuery = query
+      newQuery = query
         ? `${query} | filter ${fieldName} ${filterValue}`
         : `fetch logs | filter ${fieldName} ${filterValue}`;
-      setQuery(newQuery);
     } else if (action === "summarize") {
-      const newQuery = query
-        ? `${query} | summarize count = count(), by:{${fieldName}}`
-        : `fetch logs | summarize count = count(), by:{${fieldName}}`;
-      setQuery(newQuery);
+      newQuery = query
+        ? `${query} | summarize count(), by:{${fieldName}}`
+        : `fetch logs | summarize count(), by:{${fieldName}}`;
+    } else {
+      return;
     }
+    setQuery(newQuery);
+    // Run immediately as an exploration (no pass/fail validation).
+    const outcome = runQuery(newQuery, step.sampleData);
+    setIsExploration(true);
+    setResult({
+      passed: false,
+      message: `Exploring: ${newQuery}`,
+      userOutcome: outcome,
+      expectedOutcome: { records: [], columns: [] },
+    });
   }
 
   return (
@@ -172,14 +192,16 @@ export const CasePlayer = () => {
               padding={12}
               style={{
                 borderRadius: 4,
-                background: result.passed
+                background: isExploration
+                  ? Colors.Background.Container.Neutral.Default
+                  : result.passed
                   ? Colors.Background.Container.Success.Default
                   : Colors.Background.Container.Critical.Default,
               }}
             >
               <Strong>{result.message}</Strong>
               <Paragraph>
-                Your result ({result.userOutcome.records.length} records):
+                {isExploration ? "Result" : "Your result"} ({result.userOutcome.records.length} records):
               </Paragraph>
               <ResultTable
                 records={result.userOutcome.records}
