@@ -13,6 +13,9 @@ export const Header = () => {
         <AppHeader.NavItem as={Link} to="/sandbox">
           Sandbox
         </AppHeader.NavItem>
+        <AppHeader.NavItem as={Link} to="/log-hunt">
+          Log Hunt
+        </AppHeader.NavItem>
       </AppHeader.NavItems>
     </AppHeader>
   );

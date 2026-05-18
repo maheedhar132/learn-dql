@@ -15,8 +15,6 @@ import type { Scenario } from "../lib/types/dql";
 const TRACK_ORDER: { key: string; title: string; blurb: string }[] = [
   { key: "onboarding", title: "Onboarding", blurb: "Start here — DQL fundamentals." },
   { key: "dql", title: "DQL", blurb: "Query, filter, aggregate and shape Grail data." },
-  { key: "dpl", title: "DPL", blurb: "Extract fields from raw text with patterns." },
-  { key: "combined", title: "Combined", blurb: "End-to-end investigations." },
 ];
 
 const CaseCard = ({
