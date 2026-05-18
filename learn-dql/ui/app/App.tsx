@@ -6,6 +6,8 @@ import { Home } from "./pages/Home";
 import { Learn } from "./pages/Learn";
 import { CasePlayer } from "./pages/CasePlayer";
 import { Sandbox } from "./pages/Sandbox";
+import { LogHunt } from "./pages/LogHunt";
+import { LogHuntPlayer } from "./pages/LogHuntPlayer";
 
 export const App = () => {
   return (
@@ -19,6 +21,8 @@ export const App = () => {
           <Route path="/learn" element={<Learn />} />
           <Route path="/learn/:caseId" element={<CasePlayer />} />
           <Route path="/sandbox" element={<Sandbox />} />
+          <Route path="/log-hunt" element={<LogHunt />} />
+          <Route path="/log-hunt/:huntId" element={<LogHuntPlayer />} />
         </Routes>
       </Page.Main>
     </Page>
