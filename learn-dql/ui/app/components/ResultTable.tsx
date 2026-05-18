@@ -8,8 +8,6 @@ import {
   ArrowSmallUpIcon,
   ArrowSmallDownIcon,
   GroupIcon,
-  LineChartIcon,
-  ParseIcon,
   ArrowSmallLeftIcon,
   ArrowSmallRightIcon,
   PinIcon,
@@ -94,7 +92,7 @@ function MenuItem({
         fontSize: "0.875rem",
         fontWeight: bold ? 600 : 400,
         justifyContent: "flex-start",
-        padding: "5px 10px",
+        padding: "3px 8px",
         width: "100%",
         opacity: disabled ? 0.35 : 1,
         cursor: disabled ? "default" : "pointer",
@@ -182,10 +180,11 @@ function ColumnHeaderMenu({
               top: "100%",
               left: 0,
               zIndex: 999,
-              minWidth: "220px",
+              minWidth: "200px",
               boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
               marginTop: "4px",
-              padding: "4px 0",
+              padding: "2px 0",
+              borderRadius: 0,
             }}
           >
             <MenuItem
@@ -214,8 +213,6 @@ function ColumnHeaderMenu({
               label="Summarize"
               onClick={() => { onQueryModify?.("summarize", name); close(); }}
             />
-            <MenuItem icon={<LineChartIcon size={16} />} label="Convert to time series" disabled />
-            <MenuItem icon={<ParseIcon size={16} />}     label="Extract fields"          disabled />
 
             <MenuDivider />
 
