@@ -57,10 +57,12 @@ function QuerySandbox({ sampleData }: { sampleData: ReturnType<typeof runQuery>[
                 records={outcome.records}
                 columns={outcome.columns}
                 maxRows={100}
-                onQueryModify={(action, fieldName) => {
+                onQueryModify={(action, fieldName, filterValue) => {
                   const base = query || "fetch logs";
                   applyModify(action === "summarize"
-                    ? `${base} | summarize count(), by:{${fieldName}}`
+                    ? `${base}\n| summarize count(), by:{${fieldName}}`
+                    : action === "filter" && filterValue
+                    ? `${base}\n| filter ${fieldName} ${filterValue}`
                     : base);
                 }}
               />
