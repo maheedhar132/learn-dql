@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { DataTable } from "@dynatrace/strato-components-preview/tables";
 import { Paragraph, Text } from "@dynatrace/strato-components/typography";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
@@ -27,18 +27,37 @@ function display(value: unknown): string {
   }
 }
 
-function ColumnHeaderMenu({
-  name,
-  onQueryModify,
-}: {
+interface SortState {
+  id: string;
+  desc: boolean;
+}
+
+interface ColumnHeaderMenuProps {
   name: string;
+  sortState: SortState | null;
+  onSort: (colId: string | null, desc: boolean) => void;
   onQueryModify?: ResultTableProps["onQueryModify"];
-}) {
+}
+
+function ColumnHeaderMenu({ name, sortState, onSort, onQueryModify }: ColumnHeaderMenuProps) {
   const [open, setOpen] = useState(false);
+  const isAsc = sortState?.id === name && !sortState.desc;
+  const isDesc = sortState?.id === name && sortState.desc;
 
   return (
-    <Flex alignItems="center" gap={4} style={{ position: "relative" }}>
-      <Text style={{ fontWeight: 600, fontSize: "0.8125rem" }}>{name}</Text>
+    <Flex alignItems="center" gap={4} style={{ position: "relative", minWidth: 0 }}>
+      <Text
+        style={{
+          fontWeight: 600,
+          fontSize: "0.8125rem",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {name}
+        {isAsc ? " ↑" : isDesc ? " ↓" : ""}
+      </Text>
       <Button
         variant="default"
         onClick={(e) => {
@@ -46,20 +65,20 @@ function ColumnHeaderMenu({
           setOpen((o) => !o);
         }}
         style={{
-          padding: "0 3px",
+          padding: "0 4px",
           minWidth: 0,
-          fontSize: "1rem",
+          fontSize: "0.95rem",
           lineHeight: 1,
           background: "transparent",
           border: "none",
-          letterSpacing: "0.1em",
+          flexShrink: 0,
         }}
       >
-        ···
+        ⋮
       </Button>
+
       {open && (
         <>
-          {/* click-away backdrop */}
           <div
             style={{ position: "fixed", inset: 0, zIndex: 998 }}
             onClick={() => setOpen(false)}
@@ -70,28 +89,46 @@ function ColumnHeaderMenu({
               top: "100%",
               left: 0,
               zIndex: 999,
-              minWidth: "210px",
+              minWidth: "200px",
               boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-              marginTop: "6px",
+              marginTop: "4px",
             }}
           >
-            <Flex flexDirection="column" gap={2} padding={8}>
+            <Flex flexDirection="column" gap={0} padding={4}>
               <Button
                 variant="default"
-                onClick={() => {
-                  void navigator.clipboard.writeText(name);
-                  setOpen(false);
-                }}
+                onClick={() => { onSort(name, false); setOpen(false); }}
+                style={{ fontSize: "0.875rem", justifyContent: "flex-start", fontWeight: isAsc ? 600 : 400 }}
+              >
+                Sort ascending
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => { onSort(name, true); setOpen(false); }}
+                style={{ fontSize: "0.875rem", justifyContent: "flex-start", fontWeight: isDesc ? 600 : 400 }}
+              >
+                Sort descending
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => { onSort(null, false); setOpen(false); }}
+                style={{ fontSize: "0.875rem", justifyContent: "flex-start", opacity: sortState?.id === name ? 1 : 0.4 }}
+                disabled={sortState?.id !== name}
+              >
+                Clear sort
+              </Button>
+              {/* visual separator */}
+              <div style={{ height: 1, background: "rgba(0,0,0,0.08)", margin: "4px 0" }} />
+              <Button
+                variant="default"
+                onClick={() => { void navigator.clipboard.writeText(name); setOpen(false); }}
                 style={{ fontSize: "0.875rem", justifyContent: "flex-start" }}
               >
                 Copy field name
               </Button>
               <Button
                 variant="default"
-                onClick={() => {
-                  onQueryModify?.("summarize", name);
-                  setOpen(false);
-                }}
+                onClick={() => { onQueryModify?.("summarize", name); setOpen(false); }}
                 style={{ fontSize: "0.875rem", justifyContent: "flex-start" }}
               >
                 Summarize by {name}
@@ -110,25 +147,46 @@ export const ResultTable = ({
   maxRows = 200,
   onQueryModify,
 }: ResultTableProps) => {
-  // Slice once; pass raw DQLRecord[] — accessor reads the actual field value.
-  const data = useMemo(() => records.slice(0, maxRows), [records, maxRows]);
+  const [sortState, setSortState] = useState<SortState | null>(null);
+
+  const handleSort = useCallback((colId: string | null, desc: boolean) => {
+    setSortState(colId ? { id: colId, desc } : null);
+  }, []);
+
+  // Client-side sort applied before slicing — no `sortable` prop needed.
+  const data = useMemo(() => {
+    let rows = records;
+    if (sortState) {
+      const { id, desc } = sortState;
+      rows = [...records].sort((a, b) => {
+        const av = display(a[id]);
+        const bv = display(b[id]);
+        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+        return desc ? -cmp : cmp;
+      });
+    }
+    return rows.slice(0, maxRows);
+  }, [records, sortState, maxRows]);
 
   const colDefs = useMemo(
     () =>
       columns.map((c) => ({
         id: c.name,
-        // Strato DataTable uses `accessor` (string key or fn), not TanStack's accessorKey.
         accessor: c.name as keyof DQLRecord,
         label: c.name,
         header: () => (
-          <ColumnHeaderMenu name={c.name} onQueryModify={onQueryModify} />
+          <ColumnHeaderMenu
+            name={c.name}
+            sortState={sortState}
+            onSort={handleSort}
+            onQueryModify={onQueryModify}
+          />
         ),
-        // Custom cell: `value` is the raw field value from DQLRecord.
-        // Must return JSX.Element — display() converts any type to a readable string.
+        // cell receives { value } — the raw field value. Must return JSX.Element.
         cell: ({ value }: { value: unknown }) => <>{display(value)}</>,
         width: "auto" as const,
       })),
-    [columns, onQueryModify],
+    [columns, sortState, handleSort, onQueryModify],
   );
 
   if (records.length === 0) {
@@ -147,7 +205,6 @@ export const ResultTable = ({
         fullWidth
         resizable
         lineWrap
-        sortable
       />
       {records.length > maxRows && (
         <Paragraph style={{ fontSize: "0.875rem", opacity: 0.7 }}>
