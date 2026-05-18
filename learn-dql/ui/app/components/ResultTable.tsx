@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { DataTable } from "@dynatrace/strato-components-preview/tables";
 import { Paragraph, Text } from "@dynatrace/strato-components/typography";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
@@ -9,7 +9,11 @@ export interface ResultTableProps {
   records: DQLRecord[];
   columns: DQLColumn[];
   maxRows?: number;
-  onQueryModify?: (action: "summarize" | "filter", fieldName: string, filterValue?: string) => void;
+  onQueryModify?: (
+    action: "summarize" | "filter",
+    fieldName: string,
+    filterValue?: string,
+  ) => void;
 }
 
 function display(value: unknown): string {
@@ -48,13 +52,14 @@ function ColumnHeaderMenu({
           lineHeight: 1,
           background: "transparent",
           border: "none",
-          letterSpacing: "0.05em",
+          letterSpacing: "0.1em",
         }}
       >
         ···
       </Button>
       {open && (
         <>
+          {/* click-away backdrop */}
           <div
             style={{ position: "fixed", inset: 0, zIndex: 998 }}
             onClick={() => setOpen(false)}
@@ -105,22 +110,26 @@ export const ResultTable = ({
   maxRows = 200,
   onQueryModify,
 }: ResultTableProps) => {
-  // Pre-process each record into a flat Record<string, string> so DataTable
-  // can read values via accessorKey without encountering raw objects.
-  const data = records.slice(0, maxRows).map((r) => {
-    const row: Record<string, string> = {};
-    for (const c of columns) {
-      row[c.name] = display(r[c.name]);
-    }
-    return row;
-  });
+  // Slice once; pass raw DQLRecord[] — accessor reads the actual field value.
+  const data = useMemo(() => records.slice(0, maxRows), [records, maxRows]);
 
-  const colDefs = columns.map((c) => ({
-    id: c.name,
-    // accessorKey is the correct TanStack Table v8 property (not "accessor")
-    accessorKey: c.name,
-    header: () => <ColumnHeaderMenu name={c.name} onQueryModify={onQueryModify} />,
-  }));
+  const colDefs = useMemo(
+    () =>
+      columns.map((c) => ({
+        id: c.name,
+        // Strato DataTable uses `accessor` (string key or fn), not TanStack's accessorKey.
+        accessor: c.name as keyof DQLRecord,
+        label: c.name,
+        header: () => (
+          <ColumnHeaderMenu name={c.name} onQueryModify={onQueryModify} />
+        ),
+        // Custom cell: `value` is the raw field value from DQLRecord.
+        // Must return JSX.Element — display() converts any type to a readable string.
+        cell: ({ value }: { value: unknown }) => <>{display(value)}</>,
+        width: "auto" as const,
+      })),
+    [columns, onQueryModify],
+  );
 
   if (records.length === 0) {
     return (
@@ -132,7 +141,14 @@ export const ResultTable = ({
 
   return (
     <Flex flexDirection="column" gap={4}>
-      <DataTable data={data} columns={colDefs} />
+      <DataTable
+        data={data}
+        columns={colDefs}
+        fullWidth
+        resizable
+        lineWrap
+        sortable
+      />
       {records.length > maxRows && (
         <Paragraph style={{ fontSize: "0.875rem", opacity: 0.7 }}>
           Showing first {maxRows} of {records.length} records.
