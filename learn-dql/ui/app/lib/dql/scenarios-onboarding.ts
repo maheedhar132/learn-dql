@@ -28,18 +28,18 @@ export const onboardingScenarios: Scenario[] = [
         lesson: "fetch logs",
         goal: "Type 'fetch logs' to load the log records.",
         hint: "fetch <data-source>. Our data source here is logs.",
-        sampleData: generateAppLogs(500, 1),
+        sampleData: generateAppLogs(2200, 1),
         expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
       },
       {
         id: "step-2",
         title: "Just show me the first few",
         narration:
-          "500 records is a lot. The 'limit' command keeps only the first N. Engineers use limit constantly while exploring data — it's like flipping to the first page of a book before reading the whole thing.",
+          "2200 records is a lot. The 'limit' command keeps only the first N. Engineers use limit constantly while exploring data — it's like flipping to the first page of a book before reading the whole thing.",
         lesson: "fetch logs | limit 5",
         goal: "Limit the result to 5 rows.",
         hint: "Add ' | limit 5' to the end. The pipe '|' chains commands together.",
-        sampleData: generateAppLogs(500, 1),
+        sampleData: generateAppLogs(2200, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "limit", args: { count: 5 }, raw: "limit 5" },
@@ -64,7 +64,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: "fetch logs",
         goal: "fetch logs.",
         hint: "Just 'fetch logs'.",
-        sampleData: generateAppLogs(500, 2),
+        sampleData: generateAppLogs(2200, 2),
         expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
       },
       {
@@ -75,7 +75,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: 'fetch logs | filter loglevel == "ERROR"',
         goal: "Keep only rows where loglevel equals \"ERROR\".",
         hint: 'filter <field> == "<value>". Strings go in double quotes.',
-        sampleData: generateAppLogs(500, 2),
+        sampleData: generateAppLogs(2200, 2),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
@@ -100,7 +100,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: 'fetch logs | filter loglevel == "ERROR"',
         goal: "fetch logs and filter to ERROR rows.",
         hint: "Combine fetch + filter with a pipe.",
-        sampleData: generateAppLogs(500, 3),
+        sampleData: generateAppLogs(2200, 3),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
@@ -114,7 +114,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: 'fetch logs | filter loglevel == "ERROR" | summarize total = count()',
         goal: "Add a summarize that produces a 'total' column equal to count().",
         hint: "summarize <alias> = count(). Don't forget the equals sign.",
-        sampleData: generateAppLogs(500, 3),
+        sampleData: generateAppLogs(2200, 3),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
@@ -146,7 +146,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: 'fetch logs | filter loglevel == "ERROR" | summarize count = count(), by:{host}',
         goal: "Group the count by the host field.",
         hint: "summarize count = count(), by:{<field>}",
-        sampleData: generateAppLogs(500, 4),
+        sampleData: generateAppLogs(2200, 4),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
@@ -179,7 +179,7 @@ export const onboardingScenarios: Scenario[] = [
           'fetch logs | filter loglevel == "ERROR" | summarize count = count(), by:{host} | sort count desc',
         goal: "Sort the summarized result by 'count' in descending order.",
         hint: "sort <field> desc",
-        sampleData: generateAppLogs(500, 5),
+        sampleData: generateAppLogs(2200, 5),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
@@ -217,7 +217,7 @@ export const onboardingScenarios: Scenario[] = [
         lesson: 'fetch logs | parse content, "IP:attacker_ip"',
         goal: "Use parse to pull the IP into a new field 'attacker_ip'.",
         hint: 'parse <field>, "<pattern>"',
-        sampleData: generateAuthLogs(500, 6),
+        sampleData: generateAuthLogs(2200, 6),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           {
