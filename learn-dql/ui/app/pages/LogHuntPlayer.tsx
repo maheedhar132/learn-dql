@@ -151,6 +151,90 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
   );
 }
 
+// ─── MCQ component ────────────────────────────────────────────────────────────
+
+function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const correct = submitted && selected === mcq.correctAnswer;
+  const wrong = submitted && selected !== mcq.correctAnswer;
+
+  function submit() {
+    if (!selected) return;
+    setSubmitted(true);
+    if (selected === mcq.correctAnswer) onSolved();
+  }
+
+  return (
+    <Surface
+      style={{
+        borderLeft: `3px solid ${
+          correct ? Colors.Charts.Threshold.Good.Default
+          : wrong ? Colors.Charts.Threshold.Bad.Default
+          : "transparent"
+        }`,
+        transition: "border-color 0.2s",
+      }}
+    >
+      <Flex flexDirection="column" padding={16} gap={16}>
+        <Flex alignItems="center" gap={12}>
+          <Chip>Final Verdict</Chip>
+          <Paragraph style={{ fontWeight: 600, margin: 0 }}>{mcq.question}</Paragraph>
+        </Flex>
+
+        <Flex flexDirection="column" gap={8}>
+          {mcq.options.map((opt) => {
+            const isSelected = selected === opt;
+            const isCorrectOpt = submitted && opt === mcq.correctAnswer;
+            const isWrongOpt = submitted && isSelected && opt !== mcq.correctAnswer;
+            return (
+              <Button
+                key={opt}
+                variant="default"
+                onClick={() => { if (!submitted) setSelected(opt); }}
+                style={{
+                  justifyContent: "flex-start",
+                  background: isCorrectOpt
+                    ? `${Colors.Charts.Threshold.Good.Default}22`
+                    : isWrongOpt
+                    ? `${Colors.Charts.Threshold.Bad.Default}22`
+                    : isSelected
+                    ? "rgba(127,127,127,0.15)"
+                    : "transparent",
+                  border: isSelected
+                    ? `1px solid ${isCorrectOpt ? Colors.Charts.Threshold.Good.Default : isWrongOpt ? Colors.Charts.Threshold.Bad.Default : "rgba(127,127,127,0.4)"}`
+                    : "1px solid transparent",
+                  cursor: submitted ? "default" : "pointer",
+                  fontWeight: isSelected ? 600 : 400,
+                }}
+              >
+                {isCorrectOpt ? "✓ " : isWrongOpt ? "✗ " : ""}{opt}
+              </Button>
+            );
+          })}
+        </Flex>
+
+        {!submitted && (
+          <Button variant="accent" disabled={!selected} onClick={submit}>
+            Submit verdict
+          </Button>
+        )}
+
+        {submitted && (
+          <Paragraph
+            style={{
+              color: correct ? Colors.Charts.Threshold.Good.Default : Colors.Charts.Threshold.Bad.Default,
+              fontSize: "0.9rem",
+            }}
+          >
+            {correct ? "✓ Correct! " : "✗ Wrong. "}{mcq.explanation}
+          </Paragraph>
+        )}
+      </Flex>
+    </Surface>
+  );
+}
+
 // ─── LogHuntPlayer ────────────────────────────────────────────────────────────
 
 export const LogHuntPlayer = () => {
