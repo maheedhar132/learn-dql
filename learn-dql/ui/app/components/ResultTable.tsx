@@ -120,38 +120,40 @@ function CellValueMenu({
   displayValue: string;
   onQueryModify?: ResultTableProps["onQueryModify"];
 }) {
-  const [open, setOpen] = useState(false);
-  const close = () => setOpen(false);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const close = () => setAnchor(null);
 
   const filterVal = typeof rawValue === "string"
     ? `== "${rawValue}"`
     : rawValue === null || rawValue === undefined
-    ? `== null`
+    ? "== null"
     : `== ${String(rawValue)}`;
   const filterNeq = typeof rawValue === "string"
     ? `!= "${rawValue}"`
     : rawValue === null || rawValue === undefined
-    ? `!= null`
+    ? "!= null"
     : `!= ${String(rawValue)}`;
 
   return (
     <span
-      style={{ position: "relative", cursor: "pointer", display: "inline-block", width: "100%" }}
-      onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+      style={{ cursor: "pointer", display: "inline-block", width: "100%" }}
+      onClick={(e) => {
+        e.stopPropagation();
+        setAnchor(anchor ? null : { x: e.clientX, y: e.clientY });
+      }}
     >
       {displayValue}
-      {open && (
+      {anchor && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 998 }} onClick={(e) => { e.stopPropagation(); close(); }} />
           <Surface
             style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
+              position: "fixed",
+              top: anchor.y + 4,
+              left: anchor.x,
               zIndex: 999,
               minWidth: "200px",
               boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
-              marginTop: "2px",
               padding: "2px 0",
               borderRadius: 0,
             }}
