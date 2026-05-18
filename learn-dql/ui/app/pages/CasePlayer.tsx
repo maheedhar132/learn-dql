@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { useParams, Link as RouterLink } from "react-router-dom";
+import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
 import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
@@ -24,10 +24,13 @@ import { ResultTable } from "../components/ResultTable";
 
 export const CasePlayer = () => {
   const { caseId } = useParams<{ caseId: string }>();
-  const scenario = useMemo(
-    () => ALL_SCENARIOS.find((s) => s.id === caseId),
+  const navigate = useNavigate();
+  const scenarioIndex = useMemo(
+    () => ALL_SCENARIOS.findIndex((s) => s.id === caseId),
     [caseId],
   );
+  const scenario = scenarioIndex >= 0 ? ALL_SCENARIOS[scenarioIndex] : undefined;
+  const nextScenario = scenarioIndex >= 0 ? ALL_SCENARIOS[scenarioIndex + 1] : undefined;
 
   const [stepIndex, setStepIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -134,13 +137,23 @@ export const CasePlayer = () => {
           >
             Previous
           </Button>
-          <Button
-            variant="accent"
-            disabled={!passed || isLastStep}
-            onClick={() => setStepIndex((i) => i + 1)}
-          >
-            Next step
-          </Button>
+          {isLastStep ? (
+            <Button
+              variant="accent"
+              disabled={!passed || !nextScenario}
+              onClick={() => nextScenario && navigate(`/learn/${nextScenario.id}`)}
+            >
+              {nextScenario ? "Next case →" : "All done!"}
+            </Button>
+          ) : (
+            <Button
+              variant="accent"
+              disabled={!passed}
+              onClick={() => setStepIndex((i) => i + 1)}
+            >
+              Next step
+            </Button>
+          )}
         </Flex>
       </Flex>
 
