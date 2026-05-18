@@ -161,7 +161,7 @@ function ColumnHeaderMenu({
         variant="default"
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         style={{
-          padding: "0 3px",
+          padding: "0 4px",
           minWidth: 0,
           fontSize: "0.95rem",
           lineHeight: 1,
