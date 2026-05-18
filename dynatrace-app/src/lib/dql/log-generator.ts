@@ -18,6 +18,11 @@ function randInt(rng: () => number, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
+function randHex(rng: () => number, len: number): string {
+  const chars = "0123456789ABCDEF";
+  return Array.from({ length: len }, () => chars[Math.floor(rng() * 16)]).join("");
+}
+
 function pad2(n: number) {
   return n.toString().padStart(2, "0");
 }
@@ -101,6 +106,21 @@ export function generateDbLogs(count: number, seed: number): DQLRecord[] {
   ];
   const hosts = ["db-01", "db-02", "db-03", "db-replica-01", "db-replica-02"];
 
+  // Fixed entity IDs — stable across records so they reflect real entity topology
+  const rdsInstanceIds = [
+    `AWS_RDS_DB_INSTANCE-${randHex(rng, 16)}`,
+    `AWS_RDS_DB_INSTANCE-${randHex(rng, 16)}`,
+  ];
+  const rdsSmartscapeIds = rdsInstanceIds.map(id => id.replace("AWS_RDS_DB_INSTANCE-", "AWS_RDS_DBINSTANCE-"));
+  const rdsServiceIds = [
+    `RELATIONAL_DATABASE_SERVICE-${randHex(rng, 16)}`,
+    `RELATIONAL_DATABASE_SERVICE-${randHex(rng, 16)}`,
+  ];
+  const customDeviceIds = [
+    `CUSTOM_DEVICE-${randHex(rng, 16)}`,
+    `CUSTOM_DEVICE-${randHex(rng, 16)}`,
+  ];
+
   const records: DQLRecord[] = [];
   let elapsed = 0;
 
@@ -117,7 +137,6 @@ export function generateDbLogs(count: number, seed: number): DQLRecord[] {
       ? randInt(rng, 500, 3000)
       : randInt(rng, 20, 300);
 
-    // Embed query_type for parse-based cases (case-030)
     const queryType = query.startsWith("SELECT") ? "SELECT" : query.startsWith("INSERT") ? "INSERT" : query.startsWith("UPDATE") ? "UPDATE" : query.startsWith("DELETE") ? "DELETE" : "ALTER";
 
     let content: string;
@@ -129,14 +148,29 @@ export function generateDbLogs(count: number, seed: number): DQLRecord[] {
       content = `Query completed in ${duration_ms}ms: query_type=${queryType} ${query}`;
     }
 
-    records.push({
+    const rec: DQLRecord = {
       timestamp: formatTimestamp(baseTime, elapsed),
       loglevel: level,
       "log.source": "database",
       content,
       host,
       duration_ms,
-    });
+    };
+
+    // ~20% of records carry RDS entity enrichment (matches Dynatrace OneAgent topology)
+    if (rng() < 0.2) {
+      const idx = Math.floor(rng() * 2);
+      rec["dt.entity.relational_database_service"] = rdsServiceIds[idx];
+      rec["dt.entity.custom_device"] = customDeviceIds[idx];
+      rec["dt.smartscape.aws_rds_dbinstance"] = rdsSmartscapeIds[idx];
+      rec["dt.source_entity"] = [rdsServiceIds[idx], customDeviceIds[idx]];
+    }
+
+    if (level === "ERROR") {
+      rec["error.message"] = content;
+    }
+
+    records.push(rec);
   }
 
   return records;
@@ -381,14 +415,14 @@ export function generateAppLogs(count: number, seed: number): DQLRecord[] {
     "Queue depth exceeds threshold",
   ];
   const hosts = ["app-01", "app-02", "app-03", "app-04", "app-05", "app-06"];
-
-  const records: DQLRecord[] = [];
-  let elapsed = 0;
-
+  const httpMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
   const endpoints = [
     "/api/users", "/api/orders", "/api/products", "/api/payment",
     "/api/shipping", "/api/inventory", "/api/reports", "/api/search",
   ];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
 
   for (let i = 0; i < count; i++) {
     elapsed += randInt(rng, 3, 35);
@@ -397,32 +431,49 @@ export function generateAppLogs(count: number, seed: number): DQLRecord[] {
     const level = isError ? "ERROR" : isWarn ? "WARN" : "INFO";
     const host = randItem(rng, hosts);
     const endpoint = randItem(rng, endpoints);
+    const httpMethod = randItem(rng, httpMethods);
+    const isHttpRequest = rng() < 0.7;
 
     let content: string;
+    let httpStatus: number | undefined;
+    let errorMessage: string | undefined;
+
     if (level === "ERROR") {
-      content = randItem(rng, errorMessages);
-      // Embed endpoint patterns for parse-based cases (case-023)
-      if (rng() < 0.4) {
-        content = `Request failed on endpoint=${endpoint} - ${content}`;
-      }
+      errorMessage = randItem(rng, errorMessages);
+      httpStatus = isHttpRequest ? (rng() < 0.5 ? 500 : rng() < 0.5 ? 502 : 503) : undefined;
+      content = isHttpRequest
+        ? `Request failed on endpoint=${endpoint} - ${errorMessage}`
+        : errorMessage;
     } else if (level === "WARN") {
       content = randItem(rng, warnMessages);
-      if (rng() < 0.3) {
+      httpStatus = isHttpRequest ? (rng() < 0.5 ? 429 : 400) : undefined;
+      if (isHttpRequest && rng() < 0.3) {
         content = `Slow response on endpoint=${endpoint} - ${content}`;
       }
     } else {
       content = randItem(rng, infoMessages);
-      if (rng() < 0.2) {
+      httpStatus = isHttpRequest ? 200 : undefined;
+      if (isHttpRequest && rng() < 0.2) {
         content = `Request completed on endpoint=${endpoint} - ${content}`;
       }
     }
 
-    records.push({
+    const rec: DQLRecord = {
       timestamp: formatTimestamp(baseTime, elapsed),
       loglevel: level,
       content,
       host,
-    });
+    };
+
+    if (isHttpRequest) {
+      rec["http.method"] = httpMethod;
+      rec["http.status"] = httpStatus!;
+    }
+    if (errorMessage) {
+      rec["error.message"] = errorMessage;
+    }
+
+    records.push(rec);
   }
 
   return records;
@@ -687,7 +738,18 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
   const baseTime = new Date("2024-01-15T08:00:00Z");
   const apis = ["/v1/users", "/v1/orders", "/v1/payments", "/v1/inventory", "/v1/reports", "/v1/search", "/v1/webhooks"];
   const keys = Array.from({ length: 20 }, (_, i) => `key_${randInt(rng, 1000, 9999)}`);
-  const methods = ["GET", "POST", "PUT", "DELETE"];
+  const httpMethods = ["GET", "POST", "PUT", "DELETE"];
+
+  // Stable entity IDs — represent the AWS API Gateway topology as seen by Dynatrace
+  const apiv2Ids = Array.from({ length: 3 }, () => `AWS_API_GATEWAY_APIGATEWAYV2_API-${randHex(rng, 16)}`);
+  const restApiIds = Array.from({ length: 2 }, () => `AWS_API_GATEWAY_RESTAPI-${randHex(rng, 16)}`);
+  const errorMessages = [
+    "upstream connect error or disconnect/reset before headers",
+    "timeout awaiting response headers",
+    "rate limit quota exceeded for api key",
+    "backend target unhealthy",
+    "integration response timed out after 29000ms",
+  ];
 
   const records: DQLRecord[] = [];
   let elapsed = 0;
@@ -696,17 +758,41 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
     elapsed += randInt(rng, 1, 5);
     const api = randItem(rng, apis);
     const key = randItem(rng, keys);
-    const method = randItem(rng, methods);
+    const httpMethod = randItem(rng, httpMethods);
     const latency = randInt(rng, 20, 800);
-    const status = latency > 500 ? 503 : latency > 300 ? 429 : 200;
+    const httpStatus: number = latency > 500 ? 503 : latency > 300 ? 429 : 200;
     const quotaRemaining = randInt(rng, 0, 1000);
+    const level = httpStatus >= 500 ? "ERROR" : httpStatus >= 400 ? "WARN" : "INFO";
 
-    records.push({
+    const rec: DQLRecord = {
       timestamp: formatTimestamp(baseTime, elapsed),
-      loglevel: status >= 500 ? "ERROR" : status >= 400 ? "WARN" : "INFO",
-      content: `api_key=${key} endpoint=${method} ${api} latency_ms=${latency} status=${status} quota_remaining=${quotaRemaining}`,
+      loglevel: level,
+      content: `api_key=${key} endpoint=${httpMethod} ${api} latency_ms=${latency} status=${httpStatus} quota_remaining=${quotaRemaining}`,
       host: `gateway-${randInt(rng, 1, 3)}`,
-    });
+      "http.method": httpMethod,
+      "http.status": httpStatus,
+    };
+
+    // ~96% carry the v2 API entity (matches sample distribution 24/25)
+    if (rng() < 0.96) {
+      rec["dt.smartscape.aws_api_gateway_apigatewayv2_api"] = randItem(rng, apiv2Ids);
+    }
+
+    // ~40% also have a REST API entity (older gateway config alongside v2)
+    if (rng() < 0.4) {
+      rec["dt.smartscape.aws_api_gateway_restapi"] = randItem(rng, restApiIds);
+    }
+
+    // ~36% carry an AWS request ID (matches sample distribution 9/25)
+    if (rng() < 0.36) {
+      rec["aws.request_id"] = `${randHex(rng, 8)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 12)}`.toLowerCase();
+    }
+
+    if (level === "ERROR") {
+      rec["error.message"] = randItem(rng, errorMessages);
+    }
+
+    records.push(rec);
   }
   return records;
 }
