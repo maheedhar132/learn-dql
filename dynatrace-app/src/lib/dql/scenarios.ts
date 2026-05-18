@@ -10,6 +10,7 @@ import {
   generatePaymentLogs,
   generateK8sLogs,
   generateApiGatewayLogs,
+  generateLambdaLogs,
 } from "./log-generator";
 
 export const scenarios: Scenario[] = [

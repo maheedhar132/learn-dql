@@ -739,10 +739,14 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
   const apis = ["/v1/users", "/v1/orders", "/v1/payments", "/v1/inventory", "/v1/reports", "/v1/search", "/v1/webhooks"];
   const keys = Array.from({ length: 20 }, (_, i) => `key_${randInt(rng, 1000, 9999)}`);
   const httpMethods = ["GET", "POST", "PUT", "DELETE"];
+  const region = "us-east-1";
+  const accountId = "246186168471";
+  const firehoseStream = `StackSet-DynatraceLogsIngest-wkf10640-${randHex(rng, 8).toLowerCase()}-FH${randHex(rng, 8)}`;
 
-  // Stable entity IDs — represent the AWS API Gateway topology as seen by Dynatrace
+  // Stable entity IDs per invocation — consistent topology like a real environment
   const apiv2Ids = Array.from({ length: 3 }, () => `AWS_API_GATEWAY_APIGATEWAYV2_API-${randHex(rng, 16)}`);
   const restApiIds = Array.from({ length: 2 }, () => `AWS_API_GATEWAY_RESTAPI-${randHex(rng, 16)}`);
+  const apiNames = ["product-api", "order-api", "user-api"];
   const errorMessages = [
     "upstream connect error or disconnect/reset before headers",
     "timeout awaiting response headers",
@@ -759,31 +763,50 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
     const api = randItem(rng, apis);
     const key = randItem(rng, keys);
     const httpMethod = randItem(rng, httpMethods);
+    const apiName = randItem(rng, apiNames);
     const latency = randInt(rng, 20, 800);
     const httpStatus: number = latency > 500 ? 503 : latency > 300 ? 429 : 200;
     const quotaRemaining = randInt(rng, 0, 1000);
     const level = httpStatus >= 500 ? "ERROR" : httpStatus >= 400 ? "WARN" : "INFO";
+    const apiv2Id = randItem(rng, apiv2Ids);
+    const ts = formatTimestamp(baseTime, elapsed);
 
     const rec: DQLRecord = {
-      timestamp: formatTimestamp(baseTime, elapsed),
+      timestamp: ts,
       loglevel: level,
+      status: level,
       content: `api_key=${key} endpoint=${httpMethod} ${api} latency_ms=${latency} status=${httpStatus} quota_remaining=${quotaRemaining}`,
-      host: `gateway-${randInt(rng, 1, 3)}`,
+      message: `${httpMethod} ${api} → ${httpStatus} in ${latency}ms`,
+      "cloud.provider": "aws",
+      "aws.service": "apigateway",
+      "aws.region": region,
+      "aws.account.id": accountId,
+      "aws.resource.id": apiName,
+      "aws.resource.type": "AWS::ApiGatewayV2::Api",
+      "aws.arn": `arn:aws:apigateway:${region}::apis/${randHex(rng, 10).toLowerCase()}`,
+      "dt.da.source": "aws-log-ingest",
+      "dt.da.aws.log_group": `/aws/apigateway/${apiName}`,
+      "dt.da.aws.log_stream": `${ts.slice(0, 10).replace(/-/g, "/")}/${randHex(rng, 32).toLowerCase()}`,
+      "dt.da.aws.data_firehose.arn": `arn:aws:firehose:${region}:${accountId}:deliverystream/${firehoseStream}`,
+      "dt.openpipeline.source": "da-aws-data-firehose",
+      "dt.openpipeline.pipelines": "logs:pipeline_AWS_Log_Processing_1234",
       "http.method": httpMethod,
       "http.status": httpStatus,
     };
 
-    // ~96% carry the v2 API entity (matches sample distribution 24/25)
+    // ~96% carry the v2 API smartscape entity
     if (rng() < 0.96) {
-      rec["dt.smartscape.aws_api_gateway_apigatewayv2_api"] = randItem(rng, apiv2Ids);
+      rec["dt.smartscape.aws_api_gateway_apigatewayv2_api"] = apiv2Id;
+      rec["dt.smartscape_source.id"] = apiv2Id;
+      rec["dt.smartscape_source.type"] = "AWS_API_GATEWAY_APIGATEWAYV2_API";
     }
 
-    // ~40% also have a REST API entity (older gateway config alongside v2)
+    // ~40% also linked to a REST API entity
     if (rng() < 0.4) {
       rec["dt.smartscape.aws_api_gateway_restapi"] = randItem(rng, restApiIds);
     }
 
-    // ~36% carry an AWS request ID (matches sample distribution 9/25)
+    // ~36% carry an AWS request ID
     if (rng() < 0.36) {
       rec["aws.request_id"] = `${randHex(rng, 8)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 12)}`.toLowerCase();
     }
@@ -793,6 +816,141 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
     }
 
     records.push(rec);
+  }
+  return records;
+}
+
+// ─── AWS Lambda Logs (Dynatrace Data Firehose ingestion) ───
+export function generateLambdaLogs(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const baseTime = new Date("2026-05-18T07:00:00Z");
+  const region = "us-east-1";
+  const accountId = "246186168471";
+  const firehoseStream = `StackSet-DynatraceLogsIngest-wkf10640-1b5829b0-ed73-FHEaPNkzRlJO`;
+
+  const functions = [
+    { name: "image-provider-playground", entityId: `AWS_LAMBDA_FUNCTION-${randHex(rng, 16)}` },
+    { name: "order-processor",           entityId: `AWS_LAMBDA_FUNCTION-${randHex(rng, 16)}` },
+    { name: "payment-handler",           entityId: `AWS_LAMBDA_FUNCTION-${randHex(rng, 16)}` },
+    { name: "user-auth-service",         entityId: `AWS_LAMBDA_FUNCTION-${randHex(rng, 16)}` },
+    { name: "notification-dispatcher",   entityId: `AWS_LAMBDA_FUNCTION-${randHex(rng, 16)}` },
+  ];
+
+  const appLogMessages = [
+    (key: string) => ({ msg: `Presign URL generated correctly for product image ${key}.`, originalKey: key }),
+    (key: string) => ({ msg: `Successfully processed order ${key}.`, orderId: key }),
+    (key: string) => ({ msg: `Payment authorized for transaction ${key}.`, transactionId: key }),
+    (key: string) => ({ msg: `User authenticated: ${key}.`, userId: key }),
+    (key: string) => ({ msg: `Notification dispatched to ${key}.`, recipient: key }),
+    (key: string) => ({ msg: `Cache miss for key ${key}, fetching from S3.`, cacheKey: key }),
+    (key: string) => ({ msg: `Thumbnail generation completed for ${key}.`, assetKey: key }),
+  ];
+  const errorLogMessages = [
+    (key: string) => ({ msg: `Failed to fetch object from S3: ${key}`, key }),
+    (key: string) => ({ msg: `Database connection timeout processing ${key}`, requestId: key }),
+    (key: string) => ({ msg: `Unhandled exception in handler for ${key}`, invokeId: key }),
+  ];
+
+  const keyPool = [
+    "original/RoofBinoculars.jpg", "original/TrailCamera.jpg", "original/NightScope.jpg",
+    "original/Telescope.jpg", "original/Rangefinder.jpg", "orders/ORD-0042", "orders/ORD-1187",
+    "users/U-7724", "users/U-0091", "txn/TXN-884421", "txn/TXN-220034",
+  ];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 1, 8);
+    const fn = randItem(rng, functions);
+    const ts = formatTimestamp(baseTime, elapsed);
+    const requestId = `${randHex(rng, 8)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 4)}-${randHex(rng, 12)}`.toLowerCase();
+    const logStream = `${ts.slice(0, 10).replace(/-/g, "/")}/[$LATEST]${randHex(rng, 32).toLowerCase()}`;
+    const isPlatformReport = rng() < 0.25; // ~1 in 4 records is a Lambda platform report
+    const isError = !isPlatformReport && rng() < 0.1;
+
+    const baseFields: DQLRecord = {
+      timestamp: ts,
+      loglevel: isError ? "ERROR" : "INFO",
+      status: isError ? "ERROR" : "INFO",
+      "cloud.provider": "aws",
+      "aws.service": "lambda",
+      "aws.region": region,
+      "aws.account.id": accountId,
+      "aws.resource.id": fn.name,
+      "aws.resource.type": "AWS::Lambda::Function",
+      "aws.arn": `arn:aws:lambda:${region}:${accountId}:function:${fn.name}`,
+      "dt.da.source": "aws-log-ingest",
+      "dt.da.aws.log_group": `/aws/lambda/${fn.name}`,
+      "dt.da.aws.log_stream": logStream,
+      "dt.da.aws.data_firehose.arn": `arn:aws:firehose:${region}:${accountId}:deliverystream/${firehoseStream}`,
+      "dt.openpipeline.source": "da-aws-data-firehose",
+      "dt.openpipeline.pipelines": "logs:pipeline_AWS_Log_Processing_1234",
+      "dt.smartscape.aws_lambda_function": fn.entityId,
+      "dt.smartscape_source.id": fn.entityId,
+      "dt.smartscape_source.type": "AWS_LAMBDA_FUNCTION",
+    };
+
+    if (isPlatformReport) {
+      const durationMs = parseFloat((rng() * 800 + 10).toFixed(3));
+      const billedMs = Math.ceil(durationMs);
+      const maxMemMB = randInt(rng, 80, 450);
+      const memorySizeMB = 512;
+      const extStart = ts;
+      const extDuration = parseFloat((rng() * 40 + 5).toFixed(3));
+
+      const reportPayload = {
+        time: ts,
+        type: "platform.report",
+        record: {
+          requestId,
+          metrics: { durationMs, billedDurationMs: billedMs, memorySizeMB, maxMemoryUsedMB: maxMemMB },
+          spans: [{ name: "extensionOverhead", start: extStart, durationMs: extDuration }],
+          status: "success",
+        },
+      };
+      records.push({
+        ...baseFields,
+        content: JSON.stringify(reportPayload),
+        "aws.request_id": requestId,
+      });
+    } else {
+      const traceId = randHex(rng, 32).toLowerCase();
+      const spanId = randHex(rng, 16).toLowerCase();
+      const key = randItem(rng, keyPool);
+      const msgFn = isError
+        ? randItem(rng, errorLogMessages)
+        : randItem(rng, appLogMessages);
+      const { msg, ...extraFields } = msgFn(key);
+      const level = isError ? "error" : "info";
+
+      const contentPayload: Record<string, unknown> = {
+        "dt.span_id": spanId,
+        "dt.trace_id": traceId,
+        "dt.trace_sampled": "true",
+        level,
+        loglevel: level.toUpperCase(),
+        message: msg,
+        timestamp: ts,
+        ...extraFields,
+      };
+
+      const rec: DQLRecord = {
+        ...baseFields,
+        content: JSON.stringify(contentPayload),
+        message: msg,
+        trace_id: traceId,
+        span_id: spanId,
+        trace_sampled: "true",
+        "aws.request_id": requestId,
+      };
+
+      if (isError) {
+        rec["error.message"] = msg;
+      }
+
+      records.push(rec);
+    }
   }
   return records;
 }
