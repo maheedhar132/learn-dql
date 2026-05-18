@@ -53,22 +53,32 @@ export function generateAuthLogs(count: number, seed: number): DQLRecord[] {
   for (let i = 0; i < count; i++) {
     elapsed += randInt(rng, 1, 25);
     const isSignal = i < signalIps.length * 15; // embed signal records
-    const isError = isSignal ? true : rng() < 0.3;
-    const isWarn = !isError && rng() < 0.1;
-    const level = isError ? "ERROR" : isWarn ? "WARN" : "INFO";
+    const rand = rng();
+    let level: string;
+    if (isSignal || rand < 0.25) {
+      level = "ERROR";
+    } else if (rand < 0.35) {
+      level = "WARN";
+    } else if (rand < 0.55) {
+      level = "DEBUG";
+    } else {
+      level = "INFO";
+    }
 
-    const user = isSignal && isError ? "admin" : randItem(rng, users);
-    const ip = isSignal && isError ? signalIps[i % signalIps.length] : randItem(rng, ips);
+    const user = isSignal && level === "ERROR" ? "admin" : randItem(rng, users);
+    const ip = isSignal && level === "ERROR" ? signalIps[i % signalIps.length] : randItem(rng, ips);
     const host = randItem(rng, hosts);
 
     let content: string;
-    if (level === "INFO") {
-      content = `Login success for user=${user} from ip=${ip}`;
+    if (level === "DEBUG") {
+      content = `Authentication attempt for user=${user} from ip=${ip} via method=password`;
+    } else if (level === "INFO") {
+      content = `Login success for user=${user} from ip=${ip} via method=publickey`;
     } else if (level === "WARN") {
-      content = `Suspicious login attempt for user=${user} from ip=${ip}`;
+      content = `Suspicious login attempt for user=${user} from ip=${ip} attempt=2`;
     } else {
       // ERROR — use attacker_ip= so parse command can extract it
-      content = `Login failed for user=${user} from attacker_ip=${ip}`;
+      content = `Login failed for user=${user} from attacker_ip=${ip} attempts=5`;
     }
 
     records.push({
@@ -106,27 +116,38 @@ export function generateDbLogs(count: number, seed: number): DQLRecord[] {
 
   for (let i = 0; i < count; i++) {
     elapsed += randInt(rng, 2, 40);
-    const isSlow = rng() < 0.35;
-    const isInfo = !isSlow && rng() < 0.6;
-    const level = isSlow ? "WARN" : isInfo ? "INFO" : "ERROR";
+    const rand = rng();
+    let level: string;
+    if (rand < 0.15) {
+      level = "ERROR";
+    } else if (rand < 0.35) {
+      level = "WARN";
+    } else if (rand < 0.50) {
+      level = "DEBUG";
+    } else {
+      level = "INFO";
+    }
+
     const host = randItem(rng, hosts);
     const query = randItem(rng, queries);
-    const duration_ms = isSlow
-      ? randInt(rng, 3000, 12000)
-      : level === "ERROR"
+    const duration_ms = level === "ERROR"
       ? randInt(rng, 500, 3000)
-      : randInt(rng, 20, 300);
+      : level === "WARN"
+      ? randInt(rng, 3000, 12000)
+      : randInt(rng, 20, 500);
 
-    // Embed query_type for parse-based cases (case-030)
     const queryType = query.startsWith("SELECT") ? "SELECT" : query.startsWith("INSERT") ? "INSERT" : query.startsWith("UPDATE") ? "UPDATE" : query.startsWith("DELETE") ? "DELETE" : "ALTER";
+    const txId = `tx-${randInt(rng, 100000, 999999)}`;
 
     let content: string;
-    if (level === "WARN") {
-      content = `Slow query detected: query_type=${queryType} ${query}`;
-    } else if (level === "ERROR") {
-      content = `Query failed: query_type=${queryType} ${query}`;
+    if (level === "ERROR") {
+      content = `tx_id=${txId} query_type=${queryType} duration_ms=${duration_ms} error="Connection timeout or deadlock detected"`;
+    } else if (level === "WARN") {
+      content = `tx_id=${txId} query_type=${queryType} duration_ms=${duration_ms} warning="Slow query detected, consider indexing"`;
+    } else if (level === "DEBUG") {
+      content = `tx_id=${txId} query_type=${queryType} rows_examined=5234 rows_sent=128`;
     } else {
-      content = `Query completed in ${duration_ms}ms: query_type=${queryType} ${query}`;
+      content = `tx_id=${txId} query_type=${queryType} duration_ms=${duration_ms} rows_affected=42 status="success"`;
     }
 
     records.push({
@@ -169,23 +190,33 @@ export function generateEvents(count: number, seed: number): DQLRecord[] {
       "event.type": eventType,
       service,
       host,
+      region: `us-${randItem(rng, ["east", "west", "central"])}`,
     };
 
     if (eventType === "deployment") {
       rec.version = `v${randInt(rng, 1, 5)}.${randInt(rng, 0, 9)}.${randInt(rng, 0, 9)}`;
-      rec.status = rng() < 0.8 ? "success" : "failure";
+      rec.status = rng() < 0.85 ? "success" : "failure";
+      rec.duration_seconds = randInt(rng, 30, 600);
+      rec.rolled_back = rng() < 0.1;
     }
     if (eventType === "alert") {
-      const severity = randItem(rng, ["critical", "warning", "info"]);
+      const severity = randItem(rng, ["critical", "warning", "info", "debug"]);
       rec.severity = severity;
       rec.message = severity === "critical"
-        ? "CPU > 90%"
+        ? "CPU > 90%, instance at risk"
         : severity === "warning"
-        ? "Memory pressure detected"
-        : "Health check passed";
+        ? "Memory pressure detected: 78% used"
+        : severity === "info"
+        ? "Health check passed"
+        : "Debug: Collecting metrics";
     }
     if (eventType === "scale-up") {
-      rec.instances = randInt(rng, 1, 5);
+      rec.instances = randInt(rng, 1, 10);
+      rec.reason = randItem(rng, ["load-increase", "failover", "scheduled", "manual"]);
+    }
+    if (eventType === "restart") {
+      rec.reason = randItem(rng, ["crash", "oom-kill", "user-initiated", "maintenance"]);
+      rec.downtime_seconds = randInt(rng, 5, 120);
     }
 
     records.push(rec);
@@ -199,7 +230,8 @@ export function generateBizEvents(count: number, seed: number): DQLRecord[] {
   const rng = seededRandom(seed);
   const baseTime = new Date("2024-01-15T10:00:00Z");
   const products = ["widget", "gadget", "thingamajig", "doohickey", "gizmo", "sprocket"];
-  const methods = ["card", "paypal", "stripe", "applepay", "googlepay"];
+  const methods = ["card", "paypal", "stripe", "applepay", "googlepay", "bank_transfer"];
+  const currencies = ["USD", "EUR", "GBP", "JPY"];
   const eventTypes = [
     "com.easytrade.order_confirmed",
     "com.easytrade.payment_confirmed",
@@ -207,36 +239,49 @@ export function generateBizEvents(count: number, seed: number): DQLRecord[] {
     "com.easytrade.shipping_label_created",
     "com.easytrade.order_cancelled",
   ];
-  const accounts = Array.from({ length: 50 }, (_, i) => `ACC-${100 + i}`);
+  const accounts = Array.from({ length: 100 }, (_, i) => `ACC-${1000 + i}`);
+  const regions = ["na", "eu", "apac", "latam"];
 
   const records: DQLRecord[] = [];
   let elapsed = 0;
 
   for (let i = 0; i < count; i++) {
     elapsed += randInt(rng, 5, 90);
-    const orderId = `ORD-${String(i).padStart(4, "0")}`;
+    const orderId = `ORD-${String(randInt(rng, 10000, 99999)).padStart(5, "0")}`;
     const amount = parseFloat((rng() * 500 + 10).toFixed(2));
     const product = randItem(rng, products);
     const accountId = randItem(rng, accounts);
     const eventType = randItem(rng, eventTypes);
+    const currency = randItem(rng, currencies);
+    const region = randItem(rng, regions);
 
     const rec: DQLRecord = {
       timestamp: formatTimestamp(baseTime, elapsed),
       "event.type": eventType,
       order_id: orderId,
       amount,
+      currency,
       product,
       accountId,
+      region,
+      customer_tier: randItem(rng, ["bronze", "silver", "gold", "platinum"]),
     };
 
     if (eventType === "com.easytrade.payment_confirmed") {
       rec.method = randItem(rng, methods);
+      rec.processing_time_ms = randInt(rng, 500, 3000);
     }
     if (eventType === "com.easytrade.close_order") {
-      rec.status = rng() < 0.8 ? "fulfilled" : "returned";
+      rec.status = rng() < 0.85 ? "fulfilled" : "returned";
+      rec.delivery_days = randInt(rng, 1, 30);
     }
     if (eventType === "com.easytrade.order_cancelled") {
       rec.reason = rng() < 0.5 ? "customer_request" : "payment_failed";
+      rec.refund_status = "initiated";
+    }
+    if (eventType === "com.easytrade.shipping_label_created") {
+      rec.carrier = randItem(rng, ["fedex", "ups", "dhl", "local"]);
+      rec.tracking_id = `TRK${randInt(rng, 100000000, 999999999)}`;
     }
 
     records.push(rec);
@@ -353,32 +398,43 @@ export function generateAppLogs(count: number, seed: number): DQLRecord[] {
   const rng = seededRandom(seed);
   const baseTime = new Date("2024-01-15T08:00:00Z");
   const errorMessages = [
-    "Database connection timeout",
-    "Out of memory",
-    "NullPointerException in CartController",
+    "Database connection timeout after 30s",
+    "OutOfMemoryError: Java heap space",
+    "NullPointerException in CartController.processOrder()",
     "Connection refused to redis-cache:6379",
-    "SSL handshake failed",
-    "Rate limit exceeded",
-    "Thread pool exhausted",
-    "Disk quota exceeded",
-    "Failed to serialize response",
-    "Circuit breaker open",
+    "SSL handshake failed: certificate expired",
+    "Rate limit exceeded: 1000 req/min",
+    "Thread pool exhausted: 200/200 active threads",
+    "Disk quota exceeded: 95GB/100GB used",
+    "Failed to serialize response object",
+    "Circuit breaker open for dependency:payment-service",
+  ];
+  const debugMessages = [
+    "Entering CartController.processOrder()",
+    "Database query execution plan optimized",
+    "Cache lookup for key: user_prefs_123",
+    "Thread pool status: 45/200 active",
+    "Message queue depth: 234 messages",
+    "Executing scheduled job: data-cleanup",
+    "Attempting connection to redis-cache:6379",
   ];
   const infoMessages = [
-    "Request processed",
+    "Request processed successfully in 45ms",
     "Cache hit for key: user_prefs",
     "Scheduled job started: cleanup-temp-files",
-    "Health check passed",
-    "Webhook delivered successfully",
-    "User session refreshed",
-    "Background sync completed",
+    "Health check passed for all services",
+    "Webhook delivered successfully to receiver:stripe",
+    "User session refreshed: session_id=xyz123",
+    "Background sync completed: 1250 items synced",
   ];
   const warnMessages = [
-    "High memory usage detected",
-    "Retrying failed message delivery",
-    "Deprecated API endpoint called",
-    "Slow response time on /api/reports",
-    "Queue depth exceeds threshold",
+    "High memory usage detected: 78% heap",
+    "Retrying failed message delivery: attempt 2/3",
+    "Deprecated API endpoint called: /api/v1/old",
+    "Slow response time on /api/reports: 2500ms",
+    "Queue depth exceeds threshold: 500 items",
+    "Connection pool running low: 5/20 available",
+    "GC pause detected: 150ms full GC",
   ];
   const hosts = ["app-01", "app-02", "app-03", "app-04", "app-05", "app-06"];
 
@@ -392,29 +448,36 @@ export function generateAppLogs(count: number, seed: number): DQLRecord[] {
 
   for (let i = 0; i < count; i++) {
     elapsed += randInt(rng, 3, 35);
-    const isError = rng() < 0.25;
-    const isWarn = !isError && rng() < 0.15;
-    const level = isError ? "ERROR" : isWarn ? "WARN" : "INFO";
+    const rand = rng();
+    let level: string;
+    if (rand < 0.20) {
+      level = "ERROR";
+    } else if (rand < 0.32) {
+      level = "WARN";
+    } else if (rand < 0.55) {
+      level = "DEBUG";
+    } else {
+      level = "INFO";
+    }
+
     const host = randItem(rng, hosts);
     const endpoint = randItem(rng, endpoints);
+    const requestId = `req-${randInt(rng, 100000, 999999)}`;
+    const duration = randInt(rng, 10, level === "ERROR" ? 5000 : 500);
 
     let content: string;
     if (level === "ERROR") {
       content = randItem(rng, errorMessages);
-      // Embed endpoint patterns for parse-based cases (case-023)
-      if (rng() < 0.4) {
-        content = `Request failed on endpoint=${endpoint} - ${content}`;
-      }
+      content = `request_id=${requestId} endpoint=${endpoint} duration_ms=${duration} error="${content}"`;
     } else if (level === "WARN") {
       content = randItem(rng, warnMessages);
-      if (rng() < 0.3) {
-        content = `Slow response on endpoint=${endpoint} - ${content}`;
-      }
+      content = `request_id=${requestId} endpoint=${endpoint} duration_ms=${duration} warning="${content}"`;
+    } else if (level === "DEBUG") {
+      content = randItem(rng, debugMessages);
+      content = `request_id=${requestId} endpoint=${endpoint} action="${content}"`;
     } else {
       content = randItem(rng, infoMessages);
-      if (rng() < 0.2) {
-        content = `Request completed on endpoint=${endpoint} - ${content}`;
-      }
+      content = `request_id=${requestId} endpoint=${endpoint} duration_ms=${duration} status="ok" message="${content}"`;
     }
 
     records.push({
