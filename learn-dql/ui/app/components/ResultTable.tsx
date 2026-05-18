@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { DataTable } from "@dynatrace/strato-components-preview/tables";
 import { Paragraph, Text } from "@dynatrace/strato-components/typography";
-import { Flex } from "@dynatrace/strato-components/layouts";
+import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Surface } from "@dynatrace/strato-components/containers";
 import { EllipsisIcon } from "@dynatrace/strato-icons";
 import type { DQLRecord, DQLColumn } from "../lib/types/dql";
 
