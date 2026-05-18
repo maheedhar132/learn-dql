@@ -35,7 +35,7 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-2",
         title: "Just show me the first few",
         narration:
-          "50 records is a lot. The 'limit' command keeps only the first N. Engineers use limit constantly while exploring data — it's like flipping to the first page of a book before reading the whole thing.",
+          "500 records is a lot. The 'limit' command keeps only the first N. Engineers use limit constantly while exploring data — it's like flipping to the first page of a book before reading the whole thing.",
         lesson: "fetch logs | limit 5",
         goal: "Limit the result to 5 rows.",
         hint: "Add ' | limit 5' to the end. The pipe '|' chains commands together.",
