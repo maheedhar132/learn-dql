@@ -6,9 +6,15 @@ import type { PipelineStage } from "../types/dql";
 export interface LogHuntTask {
   id: string;
   question: string;
-  hint: string;
-  expectedPipeline: PipelineStage[];
+  solution: string;           // shown verbatim on "Show solution"
   sampleData: DQLRecord[];
+}
+
+export interface LogHuntMCQ {
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
 }
 
 export interface LogHuntScenario {
@@ -19,6 +25,7 @@ export interface LogHuntScenario {
   investigation: string;
   difficulty: "Beginner" | "Intermediate" | "Advanced";
   tasks: LogHuntTask[];
+  mcq: LogHuntMCQ;
 }
 
 // ─── Seeded RNG helpers ───────────────────────────────────────────────────────
@@ -269,45 +276,38 @@ export const logHuntScenarios: LogHuntScenario[] = [
       "Someone is pulling gifts back off the sleigh under cover of the loading frenzy. " +
       "Santa has authorised a full log audit. Every second counts.",
     investigation:
-      "Start by fetching all warehouse logs and confirming the two action types present (LOADED and SLEIGH_EXIT). " +
-      "Then find which gift IDs were LOADED but never received a SLEIGH_EXIT confirmation — those are your missing packages. " +
-      "Finally, summarise total weight loaded per elf to see whose numbers look suspicious. " +
-      "The elf with heavy loads but matching RESTOCK entries against the missing gift IDs is your culprit.",
+      "Start by fetching all warehouse logs and seeing what action types exist. " +
+      "Then look at which elves have RESTOCK entries — those are gifts that were loaded and then quietly put back. " +
+      "Finally, see who loaded the most total weight across all their LOADED actions. " +
+      "The numbers will tell you who to name.",
     tasks: [
       {
         id: "t1",
-        question: "Fetch all warehouse logs and count how many LOADED vs SLEIGH_EXIT actions exist.",
-        hint: "fetch logs | summarize count(), by:{action}",
+        question: "What action types are in the logs, and how many of each?",
+        solution: 'fetch logs | summarize count(), by:{action}',
         sampleData: santaData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",     args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { aggregations: ["count()"], by: ["action"] }, raw: "summarize count(), by:{action}" },
-        ],
       },
       {
         id: "t2",
-        question: "Which gifts were LOADED by Hermey but then appeared in a RESTOCK action? Filter to show only Hermey's RESTOCK entries.",
-        hint: "fetch logs | filter elf == \"Hermey\" | filter action == \"RESTOCK\"",
+        question: "Which elves have RESTOCK entries, and for which gift IDs?",
+        solution: 'fetch logs | filter action == "RESTOCK" | fields elf, gift_id, weight_g',
         sampleData: santaData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",  args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'elf == "Hermey"' }, raw: 'filter elf == "Hermey"' },
-          { id: "e3", command: "filter", args: { condition: 'action == "RESTOCK"' }, raw: 'filter action == "RESTOCK"' },
-        ],
       },
       {
         id: "t3",
-        question: "Which elf loaded the most total weight? Summarise sum of weight_g by elf, sort descending.",
-        hint: "fetch logs | filter action == \"LOADED\" | summarize total_weight = sum(weight_g), by:{elf} | sort total_weight desc",
+        question: "Who loaded the most total weight? Summarise weight loaded per elf, sort heaviest first.",
+        solution: 'fetch logs | filter action == "LOADED" | summarize total = sum(weight_g), by:{elf} | sort total desc',
         sampleData: santaData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",     args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter",    args: { condition: 'action == "LOADED"' }, raw: 'filter action == "LOADED"' },
-          { id: "e3", command: "summarize", args: { aggregations: ["total_weight = sum(weight_g)"], by: ["elf"] }, raw: "summarize total_weight = sum(weight_g), by:{elf}" },
-          { id: "e4", command: "sort",      args: { fields: ["total_weight"], direction: "desc" }, raw: "sort total_weight desc" },
-        ],
       },
     ],
+    mcq: {
+      question: "Based on your investigation — which elf stole the gifts?",
+      options: ["Bushy", "Hermey", "Pepper", "Sugarplum"],
+      correctAnswer: "Hermey",
+      explanation:
+        "Hermey had the highest total loaded weight AND is the only elf with RESTOCK entries for 6 specific gift IDs. " +
+        "He loaded them onto the sleigh, then logged a 'quality_check' RESTOCK to quietly remove them before SLEIGH_EXIT was recorded.",
+    },
   },
 
   {
@@ -326,45 +326,37 @@ export const logHuntScenarios: LogHuntScenario[] = [
       "The SOC team needs to isolate every Riddler request, count how many cipher drops occurred, " +
       "and identify exactly which IP is responsible.",
     investigation:
-      "First, filter the logs for HTTP 418 responses — that's The Riddler's signature status code. " +
-      "Count how many cipher messages were planted in total. " +
-      "Then narrow down to records where x_cipher is not null and list the distinct source IPs. " +
-      "Finally, summarise request counts by ip to confirm that a single IP is responsible for all the Riddler traffic " +
-      "while the rest of the IPs look like normal users.",
+      "Filter for HTTP 418 responses — that's the Riddler's signature. " +
+      "Then look at requests where x_cipher is not null, and find which user_agent stands out. " +
+      "Finally summarise request counts by IP to confirm which single address is responsible for all the noise.",
     tasks: [
       {
         id: "t1",
-        question: "Filter logs to only HTTP 418 responses and count them.",
-        hint: "fetch logs | filter http_status == 418 | summarize count()",
+        question: "How many requests returned HTTP 418? What does the breakdown by status code look like?",
+        solution: "fetch logs | summarize count(), by:{http_status} | sort count() desc",
         sampleData: riddlerData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",     args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter",    args: { condition: "http_status == 418" }, raw: "filter http_status == 418" },
-          { id: "e3", command: "summarize", args: { aggregations: ["count()"], by: [] }, raw: "summarize count()" },
-        ],
       },
       {
         id: "t2",
-        question: "Show all requests from the Riddler's IP. Filter by user_agent containing \"RiddlerBot\".",
-        hint: "fetch logs | filter contains(user_agent, \"RiddlerBot\")",
+        question: "Show all requests where x_cipher is not null. What user_agent do they share?",
+        solution: "fetch logs | filter isNotNull(x_cipher) | fields timestamp, ip, user_agent, x_cipher",
         sampleData: riddlerData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",  args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'contains(user_agent, "RiddlerBot")' }, raw: 'filter contains(user_agent, "RiddlerBot")' },
-        ],
       },
       {
         id: "t3",
-        question: "How many requests did each IP make? Summarise count by ip and sort descending to find the top attacker.",
-        hint: "fetch logs | summarize requests = count(), by:{ip} | sort requests desc",
+        question: "How many requests did each IP make? Find the outlier.",
+        solution: "fetch logs | summarize requests = count(), by:{ip} | sort requests desc",
         sampleData: riddlerData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",     args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { aggregations: ["requests = count()"], by: ["ip"] }, raw: "summarize requests = count(), by:{ip}" },
-          { id: "e3", command: "sort",      args: { fields: ["requests"], direction: "desc" }, raw: "sort requests desc" },
-        ],
       },
     ],
+    mcq: {
+      question: "Which IP address planted the cipher messages?",
+      options: ["10.13.37.42", "192.168.0.1", "172.16.0.55", "10.0.0.1"],
+      correctAnswer: "10.13.37.42",
+      explanation:
+        "IP 10.13.37.42 using user_agent 'RiddlerBot/3.0 (why-so-serious)' was responsible for all HTTP 418 requests " +
+        "and every non-null x_cipher field. All other IPs show normal traffic patterns.",
+    },
   },
 
   {
@@ -375,50 +367,42 @@ export const logHuntScenarios: LogHuntScenario[] = [
     story:
       "InterRail Logistics runs a real-time cargo tracking system across five stations — NORTHPORT, JUNCTION-7, EASTBRIDGE, SOUTHGATE, and WESTEND. " +
       "Each container is scanned when it arrives at a station (CHECK_IN) and again when it leaves for its destination (CHECK_OUT). " +
-      "Overnight, the cargo reconciliation job failed: it cannot match 11 containers that have CHECK_IN records but no corresponding CHECK_OUT. " +
+      "Overnight, the cargo reconciliation job failed: it cannot match containers that have CHECK_IN records but no corresponding CHECK_OUT. " +
       "These containers — worth an estimated €2.3 million in mixed cargo — have vanished somewhere between stations. " +
-      "One courier name keeps appearing in the anomaly report: Volkov. " +
+      "One courier name keeps appearing in the anomaly report. " +
       "The logistics director needs hard evidence from the logs before escalating to law enforcement.",
     investigation:
-      "Begin by fetching all cargo logs and summarising how many CHECK_IN versus CHECK_OUT events exist per courier — " +
-      "you're looking for an imbalance. " +
-      "Then filter to only CHECK_IN records at JUNCTION-7 (the hub where the trail goes cold) and see which couriers appear. " +
-      "Finally, isolate Volkov's activity: show all of his container movements sorted by timestamp so you can trace the exact sequence — " +
-      "CHECK_IN at origin, ghost scan at JUNCTION-7, and then silence where a CHECK_OUT should be.",
+      "Summarise CHECK_IN vs CHECK_OUT counts per courier — you are looking for a courier whose CHECK_INs far outnumber CHECK_OUTs. " +
+      "Then filter to only CHECK_IN records at JUNCTION-7 (the hub where the trail goes cold) and see which couriers appear there. " +
+      "Finally pull all movements for the suspect courier, sorted by timestamp, to see the full picture.",
     tasks: [
       {
         id: "t1",
-        question: "Summarise count of each action type per courier. Which courier has far more CHECK_INs than CHECK_OUTs?",
-        hint: "fetch logs | summarize count(), by:{courier, action} | sort courier asc",
+        question: "How many CHECK_IN vs CHECK_OUT events does each courier have?",
+        solution: "fetch logs | summarize count(), by:{courier, action} | sort courier asc",
         sampleData: trainData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",     args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { aggregations: ["count()"], by: ["courier", "action"] }, raw: "summarize count(), by:{courier, action}" },
-          { id: "e3", command: "sort",      args: { fields: ["courier"], direction: "asc" }, raw: "sort courier asc" },
-        ],
       },
       {
         id: "t2",
-        question: "Filter to Volkov's records only, sorted by timestamp. Map his full movement timeline.",
-        hint: "fetch logs | filter courier == \"Volkov\" | sort timestamp asc",
+        question: "Which couriers appear in CHECK_IN events specifically at JUNCTION-7?",
+        solution: 'fetch logs | filter action == "CHECK_IN" | filter station == "JUNCTION-7" | summarize count(), by:{courier}',
         sampleData: trainData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",  args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'courier == "Volkov"' }, raw: 'filter courier == "Volkov"' },
-          { id: "e3", command: "sort",   args: { fields: ["timestamp"], direction: "asc" }, raw: "sort timestamp asc" },
-        ],
       },
       {
         id: "t3",
-        question: "Show only the containers that ended at JUNCTION-7 with no onward movement. Filter action == CHECK_IN and station == JUNCTION-7.",
-        hint: "fetch logs | filter action == \"CHECK_IN\" | filter station == \"JUNCTION-7\"",
+        question: "Show all of the suspect courier's movements in chronological order.",
+        solution: 'fetch logs | filter courier == "Volkov" | sort timestamp asc',
         sampleData: trainData,
-        expectedPipeline: [
-          { id: "e1", command: "fetch",  args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'action == "CHECK_IN"' }, raw: 'filter action == "CHECK_IN"' },
-          { id: "e3", command: "filter", args: { condition: 'station == "JUNCTION-7"' }, raw: 'filter station == "JUNCTION-7"' },
-        ],
       },
     ],
+    mcq: {
+      question: "Which courier is responsible for the missing containers?",
+      options: ["Chen", "Okafor", "Reyes", "Volkov"],
+      correctAnswer: "Volkov",
+      explanation:
+        "Volkov has significantly more CHECK_IN records than CHECK_OUT records. " +
+        "His containers repeatedly appear at JUNCTION-7 with a second CHECK_IN scan but never reach a final CHECK_OUT at the destination — " +
+        "the containers disappear at the junction under his watch.",
+    },
   },
 ];
