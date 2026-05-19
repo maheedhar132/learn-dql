@@ -171,55 +171,73 @@ function execSort(
   return { data: sorted, columns };
 }
 
+function computeAgg(aggregation: string, aggField: string, rows: DQLRecord[], condition?: string): number {
+  const nums = rows
+    .filter((r) => !condition || evaluateCondition(condition, r))
+    .map((r) => Number(r[aggField] ?? 0));
+  if (aggregation === "count")   return condition ? nums.length : rows.length;
+  if (aggregation === "sum")     return nums.reduce((a, b) => a + b, 0);
+  if (aggregation === "avg")     return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  if (aggregation === "min")     return nums.length > 0 ? Math.min(...nums) : 0;
+  if (aggregation === "max")     return nums.length > 0 ? Math.max(...nums) : 0;
+  if (aggregation === "median") {
+    const s = [...nums].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 !== 0 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+  if (aggregation === "percentile") return nums.length > 0 ? nums.sort((a, b) => a - b)[Math.floor(nums.length * 0.95)] : 0;
+  if (aggregation === "countDistinct") return new Set(rows.map((r) => r[aggField])).size;
+  return 0;
+}
+
 function execSummarize(
   data: DQLRecord[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const byField = String(args.by || "").trim();
-  const aggregation = String(args.aggregation || "count");
-  const aggField = String(args.aggField || "");
-  const alias = String(args.alias || "count");
+  // Support multiple aggs from args.aggs: [{alias, aggregation, aggField, condition}]
+  // or fall back to single agg pattern
+  const byFields = String(args.by || "").split(",").map((f) => f.trim()).filter(Boolean);
+  const aggs: Array<{ alias: string; aggregation: string; aggField: string; condition?: string }> =
+    (args.aggs as typeof aggs) ?? [{
+      alias: String(args.alias || "count"),
+      aggregation: String(args.aggregation || "count"),
+      aggField: String(args.aggField || ""),
+      condition: args.condition as string | undefined,
+    }];
 
-  if (!byField) {
-    let val = 0;
-    if (aggregation === "count") val = data.length;
-    else if (aggregation === "sum") val = data.reduce((s, r) => s + Number(r[aggField] || 0), 0);
-    else if (aggregation === "avg") {
-      const nums = data.map((r) => Number(r[aggField] || 0));
-      val = nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  if (byFields.length === 0) {
+    const obj: DQLRecord = {};
+    for (const { alias, aggregation, aggField, condition } of aggs) {
+      obj[alias] = computeAgg(aggregation, aggField, data, condition);
     }
     return {
-      data: [{ [alias]: val }],
-      columns: [{ name: alias, type: "long" }],
+      data: [obj],
+      columns: aggs.map(({ alias }) => ({ name: alias, type: "long" })),
     };
   }
 
-  const groups = new Map<string | number, DQLRecord[]>();
+  const groups = new Map<string, DQLRecord[]>();
   for (const row of data) {
-    const key = row[byField] ?? "null";
-    if (!groups.has(key as string | number)) groups.set(key as string | number, []);
-    groups.get(key as string | number)!.push(row);
+    const key = byFields.map((f) => String(row[f] ?? "null")).join("||");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(row);
   }
 
   const out: DQLRecord[] = [];
-  for (const [key, rows] of groups) {
-    const obj: DQLRecord = { [byField]: key };
-    if (aggregation === "count") obj[alias] = rows.length;
-    else if (aggregation === "sum") obj[alias] = rows.reduce((s, r) => s + Number(r[aggField] || 0), 0);
-    else if (aggregation === "avg") {
-      const nums = rows.map((r) => Number(r[aggField] || 0));
-      obj[alias] = nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  for (const [, rows] of groups) {
+    const obj: DQLRecord = {};
+    for (const f of byFields) obj[f] = rows[0][f];
+    for (const { alias, aggregation, aggField, condition } of aggs) {
+      obj[alias] = computeAgg(aggregation, aggField, rows, condition);
     }
     out.push(obj);
   }
 
-  return {
-    data: out,
-    columns: [
-      { name: byField, type: "string" },
-      { name: alias, type: "long" },
-    ],
-  };
+  const cols: DQLColumn[] = [
+    ...byFields.map((f) => ({ name: f, type: "string" })),
+    ...aggs.map(({ alias }) => ({ name: alias, type: "long" })),
+  ];
+  return { data: out, columns: cols };
 }
 
 function execDedup(
@@ -416,36 +434,98 @@ function parseTimestamp(val: unknown): Date | null {
   return null;
 }
 
+// Parse comma-separated args respecting nested parens and quotes
+function splitArgs(s: string): string[] {
+  const parts: string[] = [];
+  let cur = "", depth = 0, inQ = false, qc = "";
+  for (const ch of s) {
+    if (!inQ && (ch === '"' || ch === "'")) { inQ = true; qc = ch; cur += ch; }
+    else if (inQ && ch === qc) { inQ = false; cur += ch; }
+    else if (!inQ && ch === "(") { depth++; cur += ch; }
+    else if (!inQ && ch === ")") { depth--; cur += ch; }
+    else if (!inQ && depth === 0 && ch === ",") { parts.push(cur.trim()); cur = ""; }
+    else { cur += ch; }
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts;
+}
+
 function evaluateExpression(expr: string, row: DQLRecord): unknown {
   const clean = expr.trim();
 
-  // Handle if(condition, then, else)
-  const ifMatch = clean.match(/^if\s*\((.+?)\s*,\s*(.+?)\s*,\s*(.+)\)$/);
-  if (ifMatch) {
-    const cond = evaluateCondition(ifMatch[1].trim(), row);
-    return cond ? evaluateExpression(ifMatch[2].trim(), row) : evaluateExpression(ifMatch[3].trim(), row);
+  // Function calls
+  const fnMatch = clean.match(/^(\w+)\((.*))\)$/s);
+  if (fnMatch) {
+    const fn = fnMatch[1].toLowerCase();
+    const rawArgs = fnMatch[2];
+
+    if (fn === "if") {
+      const parts = splitArgs(rawArgs);
+      if (parts.length >= 3) {
+        return evaluateCondition(parts[0], row)
+          ? evaluateExpression(parts[1], row)
+          : evaluateExpression(parts[2], row);
+      }
+    }
+
+    const args = splitArgs(rawArgs).map((a) => evaluateExpression(a, row));
+    const s0 = String(args[0] ?? "");
+    const n0 = Number(args[0] ?? 0);
+
+    switch (fn) {
+      // String functions
+      case "upper":          return s0.toUpperCase();
+      case "lower":          return s0.toLowerCase();
+      case "trim":           return s0.trim();
+      case "stringlength":
+      case "len":            return s0.length;
+      case "concat":         return args.map((a) => String(a ?? "")).join("");
+      case "substring": {
+        const start = Number(args[1] ?? 0);
+        const len   = args[2] !== undefined ? Number(args[2]) : undefined;
+        return len !== undefined ? s0.substring(start, start + len) : s0.substring(start);
+      }
+      case "replacestring": return s0.split(String(args[1] ?? "")).join(String(args[2] ?? ""));
+      case "indexof":       return s0.indexOf(String(args[1] ?? ""));
+      case "splitstring":   return s0.split(String(args[1] ?? ","));
+      // Type conversion
+      case "tolong":
+      case "toint":
+      case "aslong":        return Math.trunc(n0);
+      case "todouble":
+      case "asdouble":
+      case "tonumber":      return n0;
+      case "tostring":
+      case "asstring":      return s0;
+      // Math
+      case "round":         return Math.round(n0);
+      case "floor":         return Math.floor(n0);
+      case "ceil":          return Math.ceil(n0);
+      case "abs":           return Math.abs(n0);
+      case "sqrt":          return Math.sqrt(n0);
+      // Null handling
+      case "coalesce":      return args.find((a) => a != null && a !== "") ?? null;
+      case "isnull":        return args[0] == null;
+      case "isnotnull":     return args[0] != null;
+      case "isempty":       return s0 === "";
+    }
   }
 
   if (clean.startsWith('"') && clean.endsWith('"')) return clean.slice(1, -1);
   if (clean.startsWith("'") && clean.endsWith("'")) return clean.slice(1, -1);
-  if (!isNaN(Number(clean))) return Number(clean);
+  if (!isNaN(Number(clean)) && clean !== "") return Number(clean);
 
-  // Arithmetic
-  if (clean.includes("+")) {
-    const parts = clean.split("+").map((p) => Number(resolveValue(p.trim(), row)) || 0);
-    return parts.reduce((a, b) => a + b, 0);
-  }
-  if (clean.includes("-")) {
-    const parts = clean.split("-").map((p) => Number(resolveValue(p.trim(), row)) || 0);
-    return parts[0] - parts.slice(1).reduce((a, b) => a + b, 0);
-  }
-  if (clean.includes("*")) {
-    const parts = clean.split("*").map((p) => Number(resolveValue(p.trim(), row)) || 0);
-    return parts.reduce((a, b) => a * b, 1);
-  }
-  if (clean.includes("/")) {
-    const parts = clean.split("/").map((p) => Number(resolveValue(p.trim(), row)) || 0);
-    return parts.slice(1).reduce((a, b) => (b === 0 ? 0 : a / b), parts[0]);
+  // Arithmetic (simple, after function check)
+  const arithMatch = clean.match(/^(.+?)\s*([+\-*\/])\s*(.+)$/);
+  if (arithMatch) {
+    const l = Number(resolveValue(arithMatch[1].trim(), row));
+    const r = Number(resolveValue(arithMatch[3].trim(), row));
+    switch (arithMatch[2]) {
+      case "+": return l + r;
+      case "-": return l - r;
+      case "*": return l * r;
+      case "/": return r === 0 ? 0 : l / r;
+    }
   }
 
   return resolveValue(clean, row);
@@ -492,19 +572,53 @@ function splitByOperator(condition: string, operator: string): string[] {
 }
 
 export function evaluateCondition(condition: string, row: DQLRecord): boolean {
+  const cond = condition.trim();
+
+  // Handle NOT
+  if (/^not\s+/i.test(cond)) return !evaluateCondition(cond.slice(4).trim(), row);
+
   // Handle OR (lowest precedence)
-  const orParts = splitByOperator(condition, " or ");
-  if (orParts.length > 1) {
-    return orParts.some((part) => evaluateCondition(part, row));
+  const orParts = splitByOperator(cond, " or ");
+  if (orParts.length > 1) return orParts.some((p) => evaluateCondition(p, row));
+
+  // Handle AND
+  const andParts = splitByOperator(cond, " and ");
+  if (andParts.length > 1) return andParts.every((p) => evaluateCondition(p, row));
+
+  // Function-call predicates: contains(f, "v"), startsWith(f, "v"), endsWith(f, "v"),
+  // like(f, "v"), isNull(f), isNotNull(f), in(f, array(v1,v2,...))
+  const fnMatch = cond.match(/^(\w+)\((.+)\)$/s);
+  if (fnMatch) {
+    const fn = fnMatch[1].toLowerCase();
+    const rawArgs = fnMatch[2];
+    const args = splitArgs(rawArgs).map((a) => {
+      const t = a.trim();
+      if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
+      if (t in row) return row[t];
+      return t;
+    });
+    const field = splitArgs(rawArgs)[0].trim();
+    const fv = String(row[field] ?? "").toLowerCase();
+    const v  = String(args[1] ?? "").toLowerCase();
+    switch (fn) {
+      case "contains":   return fv.includes(v);
+      case "startswith": return fv.startsWith(v);
+      case "endswith":   return fv.endsWith(v);
+      case "like":       return new RegExp("^" + v.replace(/%/g, ".*").replace(/_/g, ".") + "$", "i").test(String(row[field] ?? ""));
+      case "isnull":     return row[field] == null;
+      case "isnotnull":  return row[field] != null;
+      case "in": {
+        const rest = rawArgs.slice(rawArgs.indexOf(",") + 1).trim();
+        const items = rest.replace(/^array\(/, "").replace(/\)$/, "").split(",").map((s) => {
+          const t = s.trim();
+          return (t.startsWith('"') || t.startsWith("'")) ? t.slice(1, -1) : t;
+        });
+        return items.includes(String(row[field] ?? ""));
+      }
+    }
   }
 
-  // Handle AND (higher precedence)
-  const andParts = splitByOperator(condition, " and ");
-  if (andParts.length > 1) {
-    return andParts.every((part) => evaluateCondition(part, row));
-  }
-
-  const m = condition.match(/^(.+?)\s*(==|!=|~>|~<|>=|<=|>|<|~|in)\s*(.+)$/);
+  const m = cond.match(/^(.+?)\s*(==|!=|~>|~<|>=|<=|>|<|~|in)\s*(.+)$/);
   if (!m) {
     // Try evaluating as a boolean expression directly
     const val = evaluateExpression(condition, row);
