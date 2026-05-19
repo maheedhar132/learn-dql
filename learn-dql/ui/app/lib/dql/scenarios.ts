@@ -1,2362 +1,1735 @@
 import type { Scenario } from "../types/dql";
 import {
   generateAuthLogs,
-  generateEvents,
-  generateBizEvents,
-  generateSpans,
   generateAppLogs,
   generateDbLogs,
-  generateEventsWithTags,
+  generateBizEvents,
+  generateSpans,
   generatePaymentLogs,
-  generateK8sLogs,
-  generateApiGatewayLogs,
+  generateEventsWithTags,
 } from "./log-generator";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DQL Learning Curriculum — 30 scenarios across 10 modules.
+//
+// Every step's `expectedPipeline` is written against the *actual* fields each
+// generator produces (see log-generator.ts), so the offline engine can execute
+// the reference pipeline and validate user queries by comparing result sets.
+//
+// Real top-level fields by generator:
+//   generateAuthLogs   -> timestamp, loglevel, log.source, content, host
+//   generateAppLogs    -> timestamp, loglevel, content, host
+//   generateDbLogs     -> timestamp, loglevel, log.source, content, host, duration_ms
+//   generateBizEvents  -> timestamp, event.type, order_id, amount, currency,
+//                          product, accountId, region, customer_tier (+ status,
+//                          method, reason, etc. on a subset of records)
+//   generateSpans      -> timestamp, span.name, duration, status.code,
+//                          service.name, endpoint
+//   generatePaymentLogs-> timestamp, loglevel, content, host
+//   generateEventsWithTags -> timestamp, event.type, service, host (+ status,
+//                          severity, version, instances, tags on a subset)
+//
+// All scenarios use track: "dql". No parse steps.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const scenarios: Scenario[] = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 1 — Data Sources (Beginner)
+  // ═══════════════════════════════════════════════════════════════════════════
   {
-    id: "case-001",
+    id: "case-ds-001",
+    title: "Choosing a Data Source",
+    company: "Acme Corp",
+    briefing:
+      "Acme's observability platform stores logs, spans, and business events in Grail. Before you can analyze anything, you must learn how to point a query at the right data source with `fetch`.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Fetch logs",
+        narration:
+          "Every DQL query starts by selecting a data source. `fetch logs` loads the raw log records that the rest of the pipeline will refine.",
+        lesson: "fetch logs",
+        goal: "Load the application log records into the pipeline.",
+        hint: "fetch logs",
+        sampleData: generateAppLogs(200, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Fetch spans",
+        narration:
+          "Distributed traces are made of spans. Switching the source to `spans` lets you analyze request latency instead of log lines.",
+        lesson: "fetch spans",
+        goal: "Load span (trace) records instead of logs.",
+        hint: "fetch spans",
+        sampleData: generateSpans(200, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Fetch business events",
+        narration:
+          "Business events capture domain activity like orders and payments. `fetch bizevents` is the source for revenue and funnel analysis.",
+        lesson: "fetch bizevents",
+        goal: "Load business event records.",
+        hint: "fetch bizevents",
+        sampleData: generateBizEvents(200, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ds-002",
+    title: "Comparison Filters",
+    company: "SecureBank",
+    briefing:
+      "SecureBank's SOC needs to slice authentication logs by exact values and thresholds. Master the core comparison operators: ==, !=, >, and <.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Filter by equality",
+        narration:
+          "The `==` operator keeps only records whose field matches a value exactly. Start by isolating failed logins (ERROR level).",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+        goal: "Keep only ERROR-level authentication records.",
+        hint: 'filter loglevel == "ERROR"',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Filter by inequality",
+        narration:
+          "`!=` is the inverse — it removes the matching records. Use it to drop the noisy DEBUG entries so only meaningful events remain.",
+        lesson: 'fetch logs\n| filter loglevel != "DEBUG"',
+        goal: "Exclude DEBUG records, keeping everything else.",
+        hint: 'filter loglevel != "DEBUG"',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel != "DEBUG"' }, raw: 'filter loglevel != "DEBUG"' },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Combine equality with a substring match",
+        narration:
+          "Filters compose. Combine an exact level match with a `contains()` check on the message to find failed logins specifically targeting the admin account.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR" and contains(content, "user=admin")',
+        goal: "Keep ERROR records whose content mentions the admin user.",
+        hint: 'filter loglevel == "ERROR" and contains(content, "user=admin")',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "filter",
+            args: { condition: 'loglevel == "ERROR" and contains(content, "user=admin")' },
+            raw: 'filter loglevel == "ERROR" and contains(content, "user=admin")',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ds-003",
+    title: "Excluding Noise with filterOut and search",
+    company: "CloudScale",
+    briefing:
+      "CloudScale's application logs are dominated by routine chatter. Learn to subtract noise with `filterOut` and to find anything quickly with full-text `search`.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Remove healthy traffic",
+        narration:
+          "`filterOut` keeps every record that does NOT match the condition — perfect for stripping out successful INFO traffic before an investigation.",
+        lesson: 'fetch logs\n| filterOut loglevel == "INFO"',
+        goal: "Drop INFO records, keeping warnings, errors, and debug.",
+        hint: 'filterOut loglevel == "INFO"',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filterOut", args: { condition: 'loglevel == "INFO"' }, raw: 'filterOut loglevel == "INFO"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Free-text search",
+        narration:
+          "`search` scans every field for a term without naming a column — ideal when you do not yet know where the signal lives. Hunt for timeout problems.",
+        lesson: 'fetch logs\n| search "timeout"',
+        goal: "Find every record that mentions a timeout anywhere.",
+        hint: 'search "timeout"',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "search", args: { term: "timeout" }, raw: 'search "timeout"' },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Search then subtract",
+        narration:
+          "Pipelines flow left to right. Search broadly, then `filterOut` the DEBUG diagnostics that also mention the term to keep only actionable hits.",
+        lesson: 'fetch logs\n| search "connection"\n| filterOut loglevel == "DEBUG"',
+        goal: "Find connection-related records but exclude DEBUG diagnostics.",
+        hint: 'search "connection" then filterOut loglevel == "DEBUG"',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "search", args: { term: "connection" }, raw: 'search "connection"' },
+          { id: "e3", command: "filterOut", args: { condition: 'loglevel == "DEBUG"' }, raw: 'filterOut loglevel == "DEBUG"' },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 2 — Sorting & Shaping (Beginner)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-sh-001",
+    title: "Sorting and Limiting Results",
+    company: "DataForge",
+    briefing:
+      "DataForge's DBA wants the slowest queries on the screen first. Learn to order results with `sort` and trim them with `limit`.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Sort ascending",
+        narration:
+          "`sort` orders records by a field. Ascending puts the smallest values first — start by sorting database calls from fastest to slowest.",
+        lesson: "fetch logs\n| sort duration_ms asc",
+        goal: "Order database records by duration, fastest first.",
+        hint: "sort duration_ms asc",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "sort", args: { field: "duration_ms", direction: "asc" }, raw: "sort duration_ms asc" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Sort descending",
+        narration:
+          "Flip the direction to `desc` to surface the worst offenders first — the slow queries the DBA actually cares about.",
+        lesson: "fetch logs\n| sort duration_ms desc",
+        goal: "Order database records by duration, slowest first.",
+        hint: "sort duration_ms desc",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "sort", args: { field: "duration_ms", direction: "desc" }, raw: "sort duration_ms desc" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Top N",
+        narration:
+          "Pairing a descending sort with `limit` produces a Top-N list — the ten slowest queries, ready for a dashboard tile.",
+        lesson: "fetch logs\n| sort duration_ms desc\n| limit 10",
+        goal: "Return only the 10 slowest database records.",
+        hint: "sort duration_ms desc then limit 10",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "sort", args: { field: "duration_ms", direction: "desc" }, raw: "sort duration_ms desc" },
+          { id: "e3", command: "limit", args: { count: 10 }, raw: "limit 10" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-sh-002",
+    title: "Projecting and Trimming Fields",
+    company: "CloudScale",
+    briefing:
+      "Wide records are hard to read. Learn `fields` to keep only the columns you need and `fieldsRemove` to drop the ones you do not.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Keep only what matters",
+        narration:
+          "`fields` (a.k.a. `fieldsKeep`) projects a record down to a named set of columns, discarding everything else.",
+        lesson: "fetch logs\n| fields timestamp, loglevel, host",
+        goal: "Reduce each record to just timestamp, loglevel, and host.",
+        hint: "fields timestamp, loglevel, host",
+        sampleData: generateAppLogs(250, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fields", args: { fields: "timestamp, loglevel, host" }, raw: "fields timestamp, loglevel, host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Drop a noisy column",
+        narration:
+          "When you want everything *except* one column, `fieldsRemove` is faster than listing what to keep. Drop the verbose `content` blob.",
+        lesson: "fetch logs\n| fieldsRemove content",
+        goal: "Remove the content field, keeping all other columns.",
+        hint: "fieldsRemove content",
+        sampleData: generateAppLogs(250, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsRemove", args: { fields: "content" }, raw: "fieldsRemove content" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-sh-003",
+    title: "Renaming and Deriving Fields",
+    company: "DataForge",
+    briefing:
+      "Reports need friendly column names and derived metrics. Learn `fieldsRename` and `fieldsAdd` with arithmetic.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Rename a column",
+        narration:
+          "`fieldsRename` gives a column a report-friendly name. Rename the raw `duration_ms` to `latency_ms`.",
+        lesson: "fetch logs\n| fieldsRename latency_ms = duration_ms",
+        goal: "Rename duration_ms to latency_ms.",
+        hint: "fieldsRename latency_ms = duration_ms",
+        sampleData: generateDbLogs(250, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsRename", args: { assignments: "duration_ms = latency_ms" }, raw: "fieldsRename latency_ms = duration_ms" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Derive a new metric",
+        narration:
+          "`fieldsAdd` computes a new column from an expression. Convert milliseconds to seconds by dividing by 1000.",
+        lesson: "fetch logs\n| fieldsAdd duration_s = duration_ms / 1000",
+        goal: "Add a duration_s column equal to duration_ms / 1000.",
+        hint: "fieldsAdd duration_s = duration_ms / 1000",
+        sampleData: generateDbLogs(250, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "duration_s = duration_ms / 1000" }, raw: "fieldsAdd duration_s = duration_ms / 1000" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 3 — Aggregation Basics (Beginner → Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-ag-001",
+    title: "Counting Records",
+    company: "CloudScale",
+    briefing:
+      "How many log lines are there, and how do they break down by severity? Learn `summarize count()` with and without grouping.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Total count",
+        narration:
+          "`summarize count()` collapses every record into a single number — the total volume of logs.",
+        lesson: "fetch logs\n| summarize total = count()",
+        goal: "Compute the total number of log records.",
+        hint: "summarize total = count()",
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "total", aggregation: "count", aggField: "", by: "" }, raw: "summarize total = count()" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Count per severity",
+        narration:
+          "Adding `by loglevel` produces one row per severity — the breakdown that drives a log-level pie chart.",
+        lesson: "fetch logs\n| summarize total = count(), by: loglevel",
+        goal: "Count records grouped by loglevel.",
+        hint: "summarize total = count(), by: loglevel",
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "total", aggregation: "count", aggField: "", by: "loglevel" }, raw: "summarize total = count(), by: loglevel" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-002",
+    title: "Summing and Averaging Money",
+    company: "PayStream",
+    briefing:
+      "Finance wants total and average transaction value per payment host. Learn `sum()` and `avg()`.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "premium",
+    steps: [
+      {
+        id: "step-1",
+        title: "Derive the amount, then sum it",
+        narration:
+          "Payment amounts live inside the `content` blob, so first surface a numeric column, then `summarize sum()` it per host.",
+        lesson:
+          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize total = sum(amt), by: host',
+        goal: "Add a numeric amt column and total it per host.",
+        hint: "fieldsAdd amt = toDouble(content) then summarize total = sum(amt), by: host",
+        sampleData: generatePaymentLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+          { id: "e3", command: "summarize", args: { alias: "total", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize total = sum(amt), by: host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Average per host",
+        narration:
+          "Swap `sum()` for `avg()` to get the mean transaction value each payment node processed.",
+        lesson:
+          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize avg_amt = avg(amt), by: host',
+        goal: "Compute the average amt per host.",
+        hint: "summarize avg_amt = avg(amt), by: host",
+        sampleData: generatePaymentLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+          { id: "e3", command: "summarize", args: { alias: "avg_amt", aggregation: "avg", aggField: "amt", by: "host" }, raw: "summarize avg_amt = avg(amt), by: host" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-003",
+    title: "Fastest and Slowest Queries",
+    company: "DataForge",
+    briefing:
+      "What is the best- and worst-case database latency per host? Learn `min()` and `max()`.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Minimum latency",
+        narration:
+          "`min()` returns the smallest value in each group — the best-case query time per database host.",
+        lesson: "fetch logs\n| summarize fastest = min(duration_ms), by: host",
+        goal: "Find the minimum duration_ms per host.",
+        hint: "summarize fastest = min(duration_ms), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "fastest", aggregation: "min", aggField: "duration_ms", by: "host" }, raw: "summarize fastest = min(duration_ms), by: host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Maximum latency",
+        narration:
+          "`max()` exposes the worst-case latency per host — the spikes a reliability team must explain.",
+        lesson: "fetch logs\n| summarize slowest = max(duration_ms), by: host",
+        goal: "Find the maximum duration_ms per host.",
+        hint: "summarize slowest = max(duration_ms), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "slowest", aggregation: "max", aggField: "duration_ms", by: "host" }, raw: "summarize slowest = max(duration_ms), by: host" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-004",
+    title: "Deduplicating Records",
+    company: "SecureBank",
+    briefing:
+      "The audit list should show each host once. Learn `dedup` to collapse repeats by a key field.",
+    difficulty: "Beginner",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "One row per host",
+        narration:
+          "`dedup` keeps the first record for each distinct value of a field — here, one representative line per auth host.",
+        lesson: "fetch logs\n| dedup host",
+        goal: "Keep only the first record per distinct host.",
+        hint: "dedup host",
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "dedup", args: { field: "host" }, raw: "dedup host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Dedup after filtering",
+        narration:
+          "Order matters: filter to errors first, then `dedup host` to list exactly which hosts experienced a failed login.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| dedup host',
+        goal: "List each host that had at least one ERROR, once.",
+        hint: 'filter loglevel == "ERROR" then dedup host',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "dedup", args: { field: "host" }, raw: "dedup host" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 4 — Advanced Aggregation (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-ag-005",
+    title: "Grouping by Multiple Dimensions",
+    company: "CloudScale",
+    briefing:
+      "A single grouping key is rarely enough. Learn to `summarize ... by` two fields at once for a cross-tab view.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Count by level and host",
+        narration:
+          "Listing two `by` fields produces one row per (loglevel, host) combination — the matrix behind a heatmap.",
+        lesson: "fetch logs\n| summarize n = count(), by: loglevel, host",
+        goal: "Count records grouped by both loglevel and host.",
+        hint: "summarize n = count(), by: loglevel, host",
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "loglevel, host" }, raw: "summarize n = count(), by: loglevel, host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Focus on errors per host",
+        narration:
+          "Filter to ERROR first, then group by host — a tighter view of which hosts are failing and how often.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host',
+        goal: "Count ERROR records per host.",
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-006",
+    title: "Multiple Aggregations at Once",
+    company: "DataForge",
+    briefing:
+      "Reports often need a count and an average side by side. Learn the multi-aggregation `summarize` form.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Count and average together",
+        narration:
+          "A single `summarize` can carry several aggregations. Get both the query volume and the mean latency per host in one pass.",
+        lesson:
+          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), by: host",
+        goal: "Per host, compute both the record count and the average duration_ms.",
+        hint: "summarize n = count(), avg_ms = avg(duration_ms), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "n", aggregation: "count", aggField: "" },
+                { alias: "avg_ms", aggregation: "avg", aggField: "duration_ms" },
+              ],
+              by: "host",
+            },
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), by: host",
+          },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Add the worst case",
+        narration:
+          "Extend the same summarize with a `max()` to capture the slowest query alongside the count and average.",
+        lesson:
+          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+        goal: "Per host, compute count, average, and max of duration_ms.",
+        hint: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "n", aggregation: "count", aggField: "" },
+                { alias: "avg_ms", aggregation: "avg", aggField: "duration_ms" },
+                { alias: "max_ms", aggregation: "max", aggField: "duration_ms" },
+              ],
+              by: "host",
+            },
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-007",
+    title: "Percentiles and Medians",
+    company: "DataForge",
+    briefing:
+      "Averages hide outliers. Learn `median()` and `percentile()` to describe latency the way SREs do.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "premium",
+    steps: [
+      {
+        id: "step-1",
+        title: "Median latency",
+        narration:
+          "The median is the middle value — far more robust to spikes than the mean. Compute it per database host.",
+        lesson: "fetch logs\n| summarize p50 = median(duration_ms), by: host",
+        goal: "Compute the median duration_ms per host.",
+        hint: "summarize p50 = median(duration_ms), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "p50", aggregation: "median", aggField: "duration_ms", by: "host" }, raw: "summarize p50 = median(duration_ms), by: host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "95th percentile",
+        narration:
+          "`percentile()` describes the tail. The p95 latency is the value 95% of queries stay under — a classic SLO metric.",
+        lesson: "fetch logs\n| summarize p95 = percentile(duration_ms, 95), by: host",
+        goal: "Compute the 95th-percentile duration_ms per host.",
+        hint: "summarize p95 = percentile(duration_ms, 95), by: host",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "p95", aggregation: "percentile", aggField: "duration_ms", by: "host" }, raw: "summarize p95 = percentile(duration_ms, 95), by: host" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ag-008",
+    title: "Bucketing Counts Over Time",
+    company: "CloudScale",
+    briefing:
+      "Trends only appear when you bucket by time. Meet `makeTimeseries`, the foundation of every time chart.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Records per 15 minutes",
+        narration:
+          "`makeTimeseries count()` groups records into fixed time buckets, yielding one point per interval for a line chart.",
+        lesson: "fetch logs\n| makeTimeseries count(), interval: 15m",
+        goal: "Produce a 15-minute count timeseries of all log records.",
+        hint: "makeTimeseries count(), interval: 15m",
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "count", by: "" }, raw: "makeTimeseries count(), interval: 15m" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Errors over time",
+        narration:
+          "Filter to ERROR first, then bucket — the shape of an incident as it unfolds.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries count(), interval: 15m',
+        goal: "Produce a 15-minute count timeseries of ERROR records only.",
+        hint: 'filter loglevel == "ERROR" then makeTimeseries count(), interval: 15m',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "count", by: "" }, raw: "makeTimeseries count(), interval: 15m" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 5 — Field Computation (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-fc-001",
+    title: "Conditional Columns with if()",
+    company: "CloudScale",
+    briefing:
+      "Triage is easier when every record carries a severity label. Learn `fieldsAdd` with the `if()` function.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Flag the errors",
+        narration:
+          "`if(cond, a, b)` returns `a` when the condition holds, otherwise `b`. Tag each record as critical or normal.",
+        lesson:
+          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
+        goal: 'Add severity_flag = "critical" for ERROR records, else "normal".',
+        hint: 'fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "fieldsAdd",
+            args: { assignments: 'severity_flag = if(loglevel == "ERROR", "critical", "normal")' },
+            raw: 'fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
+          },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Summarize by the derived flag",
+        narration:
+          "Derived columns behave like any other — group by `severity_flag` to count critical vs. normal traffic.",
+        lesson:
+          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")\n| summarize n = count(), by: severity_flag',
+        goal: "Count records grouped by the derived severity_flag.",
+        hint: "fieldsAdd severity_flag = ... then summarize n = count(), by: severity_flag",
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "fieldsAdd",
+            args: { assignments: 'severity_flag = if(loglevel == "ERROR", "critical", "normal")' },
+            raw: 'fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
+          },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "severity_flag" }, raw: "summarize n = count(), by: severity_flag" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-fc-002",
+    title: "Filling Gaps with coalesce()",
+    company: "CloudScale",
+    briefing:
+      "Optional fields are often missing. Learn to detect nulls with `isNull()` and supply defaults with `coalesce()`. (App logs have no optional columns, so we use enriched business events.)",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Find records missing a status",
+        narration:
+          "Not every event carries a `status`. `isNull(status)` keeps exactly the records where it is absent.",
+        lesson: "fetch bizevents\n| filter isNull(status)",
+        goal: "Keep only events that have no status field.",
+        hint: "filter isNull(status)",
+        sampleData: generateBizEvents(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+          { id: "e2", command: "filter", args: { condition: "isNull(status)" }, raw: "filter isNull(status)" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Default the missing status",
+        narration:
+          "`coalesce(a, b)` returns the first non-empty value. Backfill a readable default so every row has a status.",
+        lesson:
+          'fetch bizevents\n| fieldsAdd status_clean = coalesce(status, "unknown")',
+        goal: 'Add status_clean = status, or "unknown" when status is missing.',
+        hint: 'fieldsAdd status_clean = coalesce(status, "unknown")',
+        sampleData: generateBizEvents(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+          {
+            id: "e2",
+            command: "fieldsAdd",
+            args: { assignments: 'status_clean = coalesce(status, "unknown")' },
+            raw: 'fieldsAdd status_clean = coalesce(status, "unknown")',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-fc-003",
+    title: "Numeric Cleanup with round() and abs()",
+    company: "DataForge",
+    briefing:
+      "Raw metrics need rounding and sign normalization before they reach a report. Learn the math helpers.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Round seconds",
+        narration:
+          "Convert milliseconds to seconds and `round()` the result so the report shows whole numbers.",
+        lesson:
+          "fetch logs\n| fieldsAdd duration_s = round(duration_ms / 1000)",
+        goal: "Add duration_s = round(duration_ms / 1000).",
+        hint: "fieldsAdd duration_s = round(duration_ms / 1000)",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "duration_s = round(duration_ms / 1000)" }, raw: "fieldsAdd duration_s = round(duration_ms / 1000)" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Absolute deviation from a baseline",
+        narration:
+          "`abs()` strips the sign, turning a signed deviation into a magnitude. Measure how far each query is from a 500ms baseline.",
+        lesson:
+          "fetch logs\n| fieldsAdd deviation = abs(duration_ms - 500)",
+        goal: "Add deviation = abs(duration_ms - 500).",
+        hint: "fieldsAdd deviation = abs(duration_ms - 500)",
+        sampleData: generateDbLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "deviation = abs(duration_ms - 500)" }, raw: "fieldsAdd deviation = abs(duration_ms - 500)" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 6 — String Functions (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-str-001",
+    title: "Substring Matching",
+    company: "CloudScale",
+    briefing:
+      "Targeted text matching beats blind search. Learn `contains()` and `startsWith()` inside filters.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "contains()",
+        narration:
+          "`contains(field, term)` is a precise substring test on one column. Find every record that mentions a memory problem.",
+        lesson: 'fetch logs\n| filter contains(content, "memory")',
+        goal: "Keep records whose content contains the word 'memory'.",
+        hint: 'filter contains(content, "memory")',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'contains(content, "memory")' }, raw: 'filter contains(content, "memory")' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "startsWith()",
+        narration:
+          "`startsWith()` anchors the match to the beginning of the value. Use it on loglevel to keep only the records whose severity begins with 'ERR'.",
+        lesson: 'fetch logs\n| filter startsWith(loglevel, "ERR")',
+        goal: "Keep records whose loglevel begins with 'ERR'.",
+        hint: 'filter startsWith(loglevel, "ERR")',
+        sampleData: generateAppLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'startsWith(loglevel, "ERR")' }, raw: 'filter startsWith(loglevel, "ERR")' },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-str-002",
+    title: "Suffix and Pattern Matching",
+    company: "SecureBank",
+    briefing:
+      "Sometimes you need the end of a string, or a wildcard. Learn `endsWith()` and `like()`.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "endsWith()",
+        narration:
+          "Failed-login messages end with `attempts=5`. `endsWith()` anchors the match to the tail of the value.",
+        lesson: 'fetch logs\n| filter endsWith(content, "attempts=5")',
+        goal: "Keep records whose content ends with 'attempts=5'.",
+        hint: 'filter endsWith(content, "attempts=5")',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'endsWith(content, "attempts=5")' }, raw: 'filter endsWith(content, "attempts=5")' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "like() wildcards",
+        narration:
+          "`like()` uses `%` as a wildcard, like SQL. Match any message that contains an admin login attempt regardless of surrounding text.",
+        lesson: 'fetch logs\n| filter like(content, "%user=admin%")',
+        goal: "Keep records whose content matches the pattern %user=admin%.",
+        hint: 'filter like(content, "%user=admin%")',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'like(content, "%user=admin%")' }, raw: 'filter like(content, "%user=admin%")' },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-str-003",
+    title: "Case and Concatenation",
+    company: "SecureBank",
+    briefing:
+      "Normalize and combine string columns for readable reports. Learn `upper()`, `lower()`, and `concat()`.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Normalize case",
+        narration:
+          "`lower()` and `upper()` normalize text so comparisons and grouping are consistent regardless of original casing.",
+        lesson:
+          "fetch logs\n| fieldsAdd level_lc = lower(loglevel), host_uc = upper(host)",
+        goal: "Add a lowercased loglevel and an uppercased host.",
+        hint: "fieldsAdd level_lc = lower(loglevel), host_uc = upper(host)",
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "fieldsAdd",
+            args: { assignments: "level_lc = lower(loglevel), host_uc = upper(host)" },
+            raw: "fieldsAdd level_lc = lower(loglevel), host_uc = upper(host)",
+          },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Build a label",
+        narration:
+          "`concat()` joins values into one string. Build a compact `host@level` label for chart axes.",
+        lesson:
+          'fetch logs\n| fieldsAdd label = concat(host, "@", loglevel)',
+        goal: 'Add label = host + "@" + loglevel.',
+        hint: 'fieldsAdd label = concat(host, "@", loglevel)',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: 'label = concat(host, "@", loglevel)' }, raw: 'fieldsAdd label = concat(host, "@", loglevel)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-str-004",
+    title: "Slicing and Replacing Strings",
+    company: "SecureBank",
+    briefing:
+      "Extract fixed-width prefixes and scrub tokens. Learn `substring()` and `replaceString()`.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "substring()",
+        narration:
+          "`substring(field, start, len)` extracts a fixed slice — useful for pulling a code or prefix out of a longer value.",
+        lesson:
+          "fetch logs\n| fieldsAdd prefix = substring(content, 0, 5)",
+        goal: "Add prefix = the first 5 characters of content.",
+        hint: "fieldsAdd prefix = substring(content, 0, 5)",
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "prefix = substring(content, 0, 5)" }, raw: "fieldsAdd prefix = substring(content, 0, 5)" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "replaceString()",
+        narration:
+          "`replaceString(field, find, replace)` rewrites every occurrence of a token — handy for redaction or normalization.",
+        lesson:
+          'fetch logs\n| fieldsAdd scrubbed = replaceString(content, "attacker_ip=", "ip=")',
+        goal: 'Add scrubbed = content with "attacker_ip=" replaced by "ip=".',
+        hint: 'fieldsAdd scrubbed = replaceString(content, "attacker_ip=", "ip=")',
+        sampleData: generateAuthLogs(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "fieldsAdd",
+            args: { assignments: 'scrubbed = replaceString(content, "attacker_ip=", "ip=")' },
+            raw: 'fieldsAdd scrubbed = replaceString(content, "attacker_ip=", "ip=")',
+          },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 7 — Null Handling & Types (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-null-001",
+    title: "Present vs. Absent Fields",
+    company: "Acme Corp",
+    briefing:
+      "Optional event attributes are either there or not. Learn to split records with `isNull()` and `isNotNull()`. (App logs have no optional columns, so we use enriched events.)",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Only enriched events",
+        narration:
+          "`isNotNull(field)` keeps records where the optional field is populated — here, events that carry a deployment `status`.",
+        lesson: "fetch events\n| filter isNotNull(status)",
+        goal: "Keep only events that have a status field.",
+        hint: "filter isNotNull(status)",
+        sampleData: generateEventsWithTags(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
+          { id: "e2", command: "filter", args: { condition: "isNotNull(status)" }, raw: "filter isNotNull(status)" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Only sparse events",
+        narration:
+          "Flip to `isNull()` to inspect the records that are *missing* the attribute — often the ones that need attention.",
+        lesson: "fetch events\n| filter isNull(status)",
+        goal: "Keep only events that have no status field.",
+        hint: "filter isNull(status)",
+        sampleData: generateEventsWithTags(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
+          { id: "e2", command: "filter", args: { condition: "isNull(status)" }, raw: "filter isNull(status)" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-null-002",
+    title: "Backfilling Nulls",
+    company: "Acme Corp",
+    briefing:
+      "Charts break on nulls. Use `coalesce()` to guarantee every row has a value before you group.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Default missing status",
+        narration:
+          '`coalesce(status, "none")` substitutes a placeholder wherever `status` is absent, so downstream grouping is clean.',
+        lesson:
+          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")',
+        goal: 'Add status_clean = status, or "none" when missing.',
+        hint: 'fieldsAdd status_clean = coalesce(status, "none")',
+        sampleData: generateEventsWithTags(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: 'status_clean = coalesce(status, "none")' }, raw: 'fieldsAdd status_clean = coalesce(status, "none")' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Group on the cleaned field",
+        narration:
+          "Now every record has a `status_clean`, so a `summarize ... by status_clean` produces a complete, gap-free breakdown.",
+        lesson:
+          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")\n| summarize n = count(), by: status_clean',
+        goal: "Count events grouped by the backfilled status_clean.",
+        hint: 'fieldsAdd status_clean = coalesce(status, "none") then summarize n = count(), by: status_clean',
+        sampleData: generateEventsWithTags(300, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: 'status_clean = coalesce(status, "none")' }, raw: 'fieldsAdd status_clean = coalesce(status, "none")' },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status_clean" }, raw: "summarize n = count(), by: status_clean" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 8 — Time Series (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-ts-001",
+    title: "Error Trend Lines",
+    company: "CloudScale",
+    briefing:
+      "Spot an incident the moment it spikes. Build an error timeseries at 15-minute resolution.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Errors per 15 minutes",
+        narration:
+          "Filter to ERROR, then `makeTimeseries count()` at a 15m interval — the canonical 'is something on fire?' chart.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 15m',
+        goal: "Produce a 15-minute count timeseries of ERROR records.",
+        hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 15m',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "errors", by: "" }, raw: "makeTimeseries errors = count(), interval: 15m" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Coarser hourly view",
+        narration:
+          "Widen the interval to 1h for an executive-level trend — fewer points, smoother shape.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 1h',
+        goal: "Produce a 1-hour count timeseries of ERROR records.",
+        hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 1h',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "1h", alias: "errors", by: "" }, raw: "makeTimeseries errors = count(), interval: 1h" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-ts-002",
+    title: "Per-Service Time Series",
+    company: "Acme Corp",
+    briefing:
+      "Split a trend by service to see which one is driving it. Learn the `by` clause of `makeTimeseries`.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Spans per service over time",
+        narration:
+          "Adding `by: service.name` yields one series per service — a multi-line chart instead of a single line.",
+        lesson: "fetch spans\n| makeTimeseries n = count(), by: service.name, interval: 15m",
+        goal: "Produce a 15-minute count timeseries split by service.name.",
+        hint: "makeTimeseries n = count(), by: service.name, interval: 15m",
+        sampleData: generateSpans(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
+          { id: "e2", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: service.name, interval: 15m" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Errored spans per service",
+        narration:
+          "Filter to failing spans first, then split by service to see which service owns the failures.",
+        lesson:
+          'fetch spans\n| filter status.code == "ERROR"\n| makeTimeseries n = count(), by: service.name, interval: 15m',
+        goal: "Timeseries of ERROR spans, split by service.name, 15m buckets.",
+        hint: 'filter status.code == "ERROR" then makeTimeseries n = count(), by: service.name, interval: 15m',
+        sampleData: generateSpans(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
+          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: service.name, interval: 15m" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 9 — Multi-step Analysis (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-adv-001",
+    title: "Filter → Summarize → Sort",
+    company: "SecureBank",
+    briefing:
+      "Real analysis chains commands. Build the classic 'top offenders' pipeline end to end.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Errors per host",
+        narration:
+          "Start by isolating failures and counting them per host — the raw material for a ranking.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host',
+        goal: "Count ERROR records per host.",
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host',
+        sampleData: generateAuthLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Rank the worst hosts",
+        narration:
+          "Sort the aggregated result descending so the host with the most failed logins lands on top.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host\n| sort errors desc',
+        goal: "Produce the per-host error counts ordered worst-first.",
+        hint: "...summarize errors = count(), by: host then sort errors desc",
+        sampleData: generateAuthLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e4", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-adv-002",
+    title: "Denoise → Enrich → Summarize",
+    company: "CloudScale",
+    briefing:
+      "Strip the noise, label what remains, then aggregate. A common incident-analysis shape.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Remove debug noise",
+        narration:
+          "`filterOut` the DEBUG diagnostics so the rest of the pipeline only sees meaningful traffic.",
+        lesson: 'fetch logs\n| filterOut loglevel == "DEBUG"',
+        goal: "Drop DEBUG records.",
+        hint: 'filterOut loglevel == "DEBUG"',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filterOut", args: { condition: 'loglevel == "DEBUG"' }, raw: 'filterOut loglevel == "DEBUG"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Label, then count by label",
+        narration:
+          "Add an `is_error` flag with `if()`, then summarize by it — error vs. non-error volume after noise removal.",
+        lesson:
+          'fetch logs\n| filterOut loglevel == "DEBUG"\n| fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")\n| summarize n = count(), by: is_error',
+        goal: "After dropping DEBUG, count records grouped by an is_error flag.",
+        hint: 'filterOut DEBUG, fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no"), summarize n = count(), by: is_error',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filterOut", args: { condition: 'loglevel == "DEBUG"' }, raw: 'filterOut loglevel == "DEBUG"' },
+          {
+            id: "e3",
+            command: "fieldsAdd",
+            args: { assignments: 'is_error = if(loglevel == "ERROR", "yes", "no")' },
+            raw: 'fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")',
+          },
+          { id: "e4", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "is_error" }, raw: "summarize n = count(), by: is_error" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-adv-003",
+    title: "Search → Project → Sort → Limit",
+    company: "CloudScale",
+    briefing:
+      "Find it, shape it, rank it, trim it. The full retrieval pipeline in four moves.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Find the candidates",
+        narration:
+          "Search broadly for anything mentioning latency, then project to the columns a responder needs.",
+        lesson:
+          'fetch logs\n| search "duration_ms"\n| fields timestamp, loglevel, host, content',
+        goal: "Search for 'duration_ms' and keep only four columns.",
+        hint: 'search "duration_ms" then fields timestamp, loglevel, host, content',
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "search", args: { term: "duration_ms" }, raw: 'search "duration_ms"' },
+          { id: "e3", command: "fields", args: { fields: "timestamp, loglevel, host, content" }, raw: "fields timestamp, loglevel, host, content" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Newest ten",
+        narration:
+          "Sort by timestamp descending and `limit 10` to surface the ten most recent matching events.",
+        lesson:
+          'fetch logs\n| search "duration_ms"\n| fields timestamp, loglevel, host, content\n| sort timestamp desc\n| limit 10',
+        goal: "From the projected matches, return the 10 newest by timestamp.",
+        hint: "...fields ... then sort timestamp desc then limit 10",
+        sampleData: generateAppLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "search", args: { term: "duration_ms" }, raw: 'search "duration_ms"' },
+          { id: "e3", command: "fields", args: { fields: "timestamp, loglevel, host, content" }, raw: "fields timestamp, loglevel, host, content" },
+          { id: "e4", command: "sort", args: { field: "timestamp", direction: "desc" }, raw: "sort timestamp desc" },
+          { id: "e5", command: "limit", args: { count: 10 }, raw: "limit 10" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-adv-004",
+    title: "Complex Multi-Condition Aggregation",
+    company: "DataForge",
+    briefing:
+      "Combine a compound filter with multiple aggregations and a ranking — a real performance-review query.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "premium",
+    steps: [
+      {
+        id: "step-1",
+        title: "Slow non-debug queries",
+        narration:
+          "Compound `and` conditions narrow the dataset to slow (>1000ms) queries that are not DEBUG noise.",
+        lesson:
+          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"',
+        goal: "Keep records where duration_ms > 1000 and loglevel != DEBUG.",
+        hint: 'filter duration_ms > 1000 and loglevel != "DEBUG"',
+        sampleData: generateDbLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "filter",
+            args: { condition: 'duration_ms > 1000 and loglevel != "DEBUG"' },
+            raw: 'filter duration_ms > 1000 and loglevel != "DEBUG"',
+          },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Profile and rank hosts",
+        narration:
+          "Aggregate count, average, and max per host, then sort by the worst-case latency to rank the problem hosts.",
+        lesson:
+          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host\n| sort max_ms desc',
+        goal: "Per host, compute count/avg/max of duration_ms for slow non-debug queries, ranked by max_ms.",
+        hint: "...summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: host then sort max_ms desc",
+        sampleData: generateDbLogs(400, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "filter",
+            args: { condition: 'duration_ms > 1000 and loglevel != "DEBUG"' },
+            raw: 'filter duration_ms > 1000 and loglevel != "DEBUG"',
+          },
+          {
+            id: "e3",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "n", aggregation: "count", aggField: "" },
+                { alias: "avg_ms", aggregation: "avg", aggField: "duration_ms" },
+                { alias: "max_ms", aggregation: "max", aggField: "duration_ms" },
+              ],
+              by: "host",
+            },
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          },
+          { id: "e4", command: "sort", args: { field: "max_ms", direction: "desc" }, raw: "sort max_ms desc" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 10 — Real Investigations (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-inv-001",
     title: "The Midnight Breach",
     company: "SecureBank",
     briefing:
-      "Our authentication service detected multiple failed login attempts between 08:30 and 08:40. We need to identify the affected accounts and attack patterns.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch the logs",
-        narration:
-          "The security team has pulled logs from the auth service. Your first task is to load them into the pipeline.",
-        lesson: "fetch logs, from: -1h",
-        goal: "Load the authentication logs from the last hour.",
-        hint: "Use the 'fetch' command with source 'logs'.",
-        sampleData: generateAuthLogs(2400, 1),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter for errors",
-        narration:
-          "Now that we have the logs, we need to isolate only the failed login attempts. Filter for ERROR level entries.",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Show only ERROR-level log entries.",
-        hint: "Use the 'filter' command with condition loglevel == 'ERROR'.",
-        sampleData: generateAuthLogs(2400, 1),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Parse the attacker IP",
-        narration:
-          "The content field contains the IP address in a structured format. Let's parse it out so we can group by IP.",
-        lesson: 'parse content, "IP:attacker_ip"',
-        goal: "Extract the IP address from the content field.",
-        hint: "Use 'parse content' with a pattern to capture the IP.",
-        sampleData: generateAuthLogs(2400, 1),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: 'parse content, "IP:attacker_ip"' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Count failures per IP",
-        narration:
-          "We now have the parsed attacker_ip field. Let's summarize to count how many failed attempts came from each IP address.",
-        lesson: "summarize count = count(), by:{attacker_ip}",
-        goal: "Count failed logins per IP address.",
-        hint: "Use 'summarize' with count() and group by attacker_ip.",
-        sampleData: generateAuthLogs(2400, 1),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: 'parse content, "IP:attacker_ip"' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "attacker_ip" }, raw: "summarize count = count(), by:{attacker_ip}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-002",
-    title: "Deployment Tracker",
-    company: "OpsCorp",
-    briefing:
-      "Our deployment pipeline shows intermittent failures. We need to trace which services had failed deployments and identify critical alerts.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Let's pull the deployment and alert events.",
-        lesson: "fetch events",
-        goal: "Load deployment and alert events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 2),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter deployments",
-        narration: "We only care about deployment events for now.",
-        lesson: 'filter event.type == "deployment"',
-        goal: "Filter for deployment events.",
-        hint: "Filter where event.type equals deployment.",
-        sampleData: generateEvents(2400, 2),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\"" }, raw: "filter event.type == \"deployment\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter failed deployments",
-        narration: "Isolate only the failed deployments to find problematic services.",
-        lesson: 'filter status == "failure"',
-        goal: "Show only failed deployments.",
-        hint: "Filter where status equals failure.",
-        sampleData: generateEvents(2400, 2),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\"" }, raw: "filter event.type == \"deployment\"" },
-          { id: "e3", command: "filter", args: { condition: "status == \"failure\"" }, raw: "filter status == \"failure\"" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-003",
-    title: "The Phantom Orders",
-    company: "EasyTrade",
-    briefing:
-      "Customers are complaining about orders that were placed but never fulfilled. We need to trace the order lifecycle through business events.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Let's pull the business events to see the order flow.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 3),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Summarize by order",
-        narration: "Count how many events each order has. Orders with fewer than 3 events may be incomplete.",
-        lesson: "summarize count = count(), by:{order_id}",
-        goal: "Count events per order.",
-        hint: "Use summarize with by:order_id.",
-        sampleData: generateBizEvents(2400, 3),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "summarize", args: { aggregation: "count", alias: "count", by: "order_id" }, raw: "summarize count = count(), by:{order_id}" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter incomplete orders",
-        narration: "Some orders only have 1 event (order_confirmed) and are missing payment and close. Let's filter for incomplete orders.",
-        lesson: "filter count < 3",
-        goal: "Find orders with fewer than 3 events.",
-        hint: "Filter where count is less than 3.",
-        sampleData: generateBizEvents(2400, 3),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "summarize", args: { aggregation: "count", alias: "count", by: "order_id" }, raw: "summarize count = count(), by:{order_id}" },
-          { id: "e3", command: "filter", args: { condition: "count < 3" }, raw: "filter count < 3" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-004",
-    title: "Span Latency Spike",
-    company: "CloudServices",
-    briefing:
-      "API latency has spiked. We need to identify which endpoints are slowest and which services are failing.",
+      "At 08:30 the SOC saw a wave of failed admin logins. Reconstruct the attack: isolate the failures, confirm the admin account was targeted, and rank the hosts under fire.",
     difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
     steps: [
       {
         id: "step-1",
-        title: "Fetch spans",
-        narration: "Pull distributed tracing spans to analyze latency.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 4),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
+        title: "Isolate the failed logins",
+        narration:
+          "Every failed authentication is logged at ERROR level. Strip everything else to focus the investigation.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+        goal: "Keep only ERROR-level authentication records.",
+        hint: 'filter loglevel == "ERROR"',
+        sampleData: generateAuthLogs(500, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+        ],
       },
       {
         id: "step-2",
-        title: "Filter errors",
-        narration: "Find spans with ERROR status to identify failing endpoints.",
-        lesson: 'filter status.code == "ERROR"',
-        goal: "Filter for error spans.",
-        hint: "Filter where status.code equals ERROR.",
-        sampleData: generateSpans(2400, 4),
+        title: "Confirm the admin was the target",
+        narration:
+          "The attacker hammered the privileged `admin` account. Narrow to failures whose message names that user.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")',
+        goal: "Keep ERROR records whose content mentions user=admin.",
+        hint: 'filter loglevel == "ERROR" then filter contains(content, "user=admin")',
+        sampleData: generateAuthLogs(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"ERROR\"" }, raw: "filter status.code == \"ERROR\"" },
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "filter", args: { condition: 'contains(content, "user=admin")' }, raw: 'filter contains(content, "user=admin")' },
         ],
       },
       {
         id: "step-3",
-        title: "Sort by duration",
-        narration: "Sort the error spans by duration descending to find the slowest failing endpoints.",
-        lesson: "sort duration desc",
-        goal: "Sort error spans by duration.",
-        hint: "Use sort with duration and desc direction.",
-        sampleData: generateSpans(2400, 4),
+        title: "Rank the hosts under attack",
+        narration:
+          "Count the admin-targeted failures per host and sort descending — the top row is where the attacker concentrated.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")\n| summarize hits = count(), by: host\n| sort hits desc',
+        goal: "Per host, count admin-targeted ERROR logins, ranked worst-first.",
+        hint: '...filter contains(content, "user=admin") then summarize hits = count(), by: host then sort hits desc',
+        sampleData: generateAuthLogs(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"ERROR\"" }, raw: "filter status.code == \"ERROR\"" },
-          { id: "e3", command: "sort", args: { field: "duration", direction: "desc" }, raw: "sort duration desc" },
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "filter", args: { condition: 'contains(content, "user=admin")' }, raw: 'filter contains(content, "user=admin")' },
+          { id: "e4", command: "summarize", args: { alias: "hits", aggregation: "count", aggField: "", by: "host" }, raw: "summarize hits = count(), by: host" },
+          { id: "e5", command: "sort", args: { field: "hits", direction: "desc" }, raw: "sort hits desc" },
         ],
       },
     ],
   },
   {
-    id: "case-005",
+    id: "case-inv-002",
     title: "The Error Storm",
     company: "CloudScale",
     briefing:
-      "Our error monitoring dashboard shows a spike in 5xx errors over the last hour. We need to pinpoint when the surge started and how it trended.",
+      "Pager just lit up: error rate spiking across the fleet. Find which host is the epicenter and chart how the storm built over time.",
     difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
     steps: [
       {
         id: "step-1",
-        title: "Fetch logs",
-        narration: "Pull the application logs to analyze the error trend.",
-        lesson: "fetch logs, from: -1h",
-        goal: "Load the application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 5),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
+        title: "Collect the errors",
+        narration:
+          "Filter the application logs down to ERROR — the population the storm is made of.",
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+        goal: "Keep only ERROR-level application records.",
+        hint: 'filter loglevel == "ERROR"',
+        sampleData: generateAppLogs(500, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+        ],
       },
       {
         id: "step-2",
-        title: "Filter for errors",
-        narration: "Isolate only ERROR-level logs so we can focus on failures.",
-        lesson: 'filter loglevel == "ERROR"',
-        goal: "Show only ERROR logs.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAppLogs(2400, 5),
+        title: "Find the epicenter host",
+        narration:
+          "Count errors per host and rank — the host at the top is where the on-call should look first.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host\n| sort errors desc',
+        goal: "Per host, count ERROR records, ranked worst-first.",
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host then sort errors desc',
+        sampleData: generateAppLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e4", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
         ],
       },
       {
         id: "step-3",
-        title: "Make time series",
-        narration: "Aggregate error count into 15-minute buckets to visualize the trend.",
-        lesson: "makeTimeseries errors = count(), interval:15m",
-        goal: "Create a time series of error counts per 15 minutes.",
-        hint: "Use makeTimeseries with count() and interval:15m.",
-        sampleData: generateAppLogs(2400, 5),
+        title: "Chart the storm",
+        narration:
+          "Bucket the errors into 15-minute intervals to see when the storm started and whether it is still growing.",
+        lesson:
+          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 15m',
+        goal: "Produce a 15-minute count timeseries of ERROR records.",
+        hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 15m',
+        sampleData: generateAppLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "15m" }, raw: "makeTimeseries errors = count(), interval:15m" },
+          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "errors", by: "" }, raw: "makeTimeseries errors = count(), interval: 15m" },
         ],
       },
     ],
   },
   {
-    id: "case-006",
+    id: "case-inv-003",
     title: "The Slow Query Heist",
-    company: "DataVault",
+    company: "DataForge",
     briefing:
-      "The database team reports unusual latency spikes. We need to identify the slowest queries in the logs.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch db logs",
-        narration: "Load the database logs to start the investigation.",
-        lesson: "fetch logs",
-        goal: "Load database logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateDbLogs(2400, 6),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter slow queries",
-        narration: "Isolate WARN-level entries which flag slow query detections.",
-        lesson: "filter loglevel == \"WARN\"",
-        goal: "Show only slow query warnings.",
-        hint: "Filter where loglevel equals WARN.",
-        sampleData: generateDbLogs(2400, 6),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"WARN\"" }, raw: "filter loglevel == \"WARN\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Sort by duration",
-        narration: "Sort the slow queries by duration_ms descending to find the worst offenders.",
-        lesson: "sort duration_ms desc",
-        goal: "Sort slow queries by duration.",
-        hint: "Use sort with duration_ms and desc direction.",
-        sampleData: generateDbLogs(2400, 6),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"WARN\"" }, raw: "filter loglevel == \"WARN\"" },
-          { id: "e3", command: "sort", args: { field: "duration_ms", direction: "desc" }, raw: "sort duration_ms desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-007",
-    title: "The Missing Alert",
-    company: "AlertOps",
-    briefing:
-      "A critical alert was triggered overnight but got lost in the noise. Find it before the on-call engineer gets paged again.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Pull all system events to hunt for the missing critical alert.",
-        lesson: "fetch events",
-        goal: "Load system events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 7),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter critical alerts",
-        narration: "We know the alert severity was critical. Filter for it directly.",
-        lesson: "filter severity == \"critical\"",
-        goal: "Show only critical alerts.",
-        hint: "Filter where severity equals critical.",
-        sampleData: generateEvents(2400, 7),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "severity == \"critical\"" }, raw: "filter severity == \"critical\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Project key fields",
-        narration: "Keep only the fields we need for the incident report.",
-        lesson: "fields timestamp, service, severity, message",
-        goal: "Keep timestamp, service, severity, and message.",
-        hint: "Use fields to keep only the required columns.",
-        sampleData: generateEvents(2400, 7),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "severity == \"critical\"" }, raw: "filter severity == \"critical\"" },
-          { id: "e3", command: "fields", args: { fields: "timestamp, service, severity, message" }, raw: "fields timestamp, service, severity, message" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-008",
-    title: "The Product Catalog",
-    company: "EasyTrade",
-    briefing:
-      "The analytics team wants a clean list of all unique products sold. Remove duplicates from the business events.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Load the business events to see what products are in the catalog.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 8),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Deduplicate products",
-        narration: "Use dedup to keep only the first occurrence of each product.",
-        lesson: "dedup product",
-        goal: "Remove duplicate product rows.",
-        hint: "Use dedup with field product.",
-        sampleData: generateBizEvents(2400, 8),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "dedup", args: { field: "product" }, raw: "dedup product" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Keep product names",
-        narration: "Project only the product field for a clean catalog list.",
-        lesson: "fields product",
-        goal: "Keep only the product column.",
-        hint: "Use fields to keep just the product column.",
-        sampleData: generateBizEvents(2400, 8),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "dedup", args: { field: "product" }, raw: "dedup product" },
-          { id: "e3", command: "fields", args: { fields: "product" }, raw: "fields product" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-009",
-    title: "The Status Check",
-    company: "CloudServices",
-    briefing:
-      "We need a quick report of the top 5 error spans to send to the SRE team.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 9),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Show only spans with ERROR status.",
-        lesson: "filter status.code == \"ERROR\"",
-        goal: "Filter for error spans.",
-        hint: "Filter where status.code equals ERROR.",
-        sampleData: generateSpans(2400, 9),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"ERROR\"" }, raw: "filter status.code == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Limit to top 5",
-        narration: "Cap the results to the first 5 error spans.",
-        lesson: "limit 5",
-        goal: "Show only the first 5 error spans.",
-        hint: "Use limit with count 5.",
-        sampleData: generateSpans(2400, 9),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"ERROR\"" }, raw: "filter status.code == \"ERROR\"" },
-          { id: "e3", command: "limit", args: { count: 5 }, raw: "limit 5" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-010",
-    title: "The Search Widens",
-    company: "CloudScale",
-    briefing:
-      "Several timeout errors were reported but the exact log source is unclear. Use search to find all timeout-related entries.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load the application logs to search for timeout references.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 10),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Search for timeout",
-        narration: "Use search to find any log containing the word timeout across all fields.",
-        lesson: "search \"timeout\"",
-        goal: "Find all logs mentioning timeout.",
-        hint: "Use search with term timeout.",
-        sampleData: generateAppLogs(2400, 10),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "search", args: { term: "timeout" }, raw: "search \"timeout\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter to errors",
-        narration: "Narrow the timeout results to ERROR-level entries only.",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Show only ERROR timeout logs.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAppLogs(2400, 10),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "search", args: { term: "timeout" }, raw: "search \"timeout\"" },
-          { id: "e3", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-011",
-    title: "The Noise Gate",
-    company: "CloudScale",
-    briefing:
-      "The log stream is flooded with INFO noise. Remove it and summarize what severity levels remain.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load the full application log stream.",
-        lesson: "fetch logs",
-        goal: "Load all application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 11),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter out INFO",
-        narration: "Exclude INFO-level logs to focus on real issues.",
-        lesson: "filterOut loglevel == \"INFO\"",
-        goal: "Remove INFO logs from the stream.",
-        hint: "Use filterOut to exclude INFO entries.",
-        sampleData: generateAppLogs(2400, 11),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filterOut", args: { condition: "loglevel == \"INFO\"" }, raw: "filterOut loglevel == \"INFO\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Summarize by level",
-        narration: "Count how many WARN and ERROR logs remain after filtering out INFO.",
-        lesson: "summarize count = count(), by:{loglevel}",
-        goal: "Count remaining logs per severity level.",
-        hint: "Use summarize with count() grouped by loglevel.",
-        sampleData: generateAppLogs(2400, 11),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filterOut", args: { condition: "loglevel == \"INFO\"" }, raw: "filterOut loglevel == \"INFO\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "loglevel" }, raw: "summarize count = count(), by:{loglevel}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-012",
-    title: "The Host Hunt",
-    company: "SecureBank",
-    briefing:
-      "We need to know which hosts are under the heaviest attack. Count failed logins per host and rank them.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch auth logs",
-        narration: "Load the authentication logs.",
-        lesson: "fetch logs",
-        goal: "Load auth logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAuthLogs(2400, 12),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Keep only ERROR-level entries (failed logins).",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Filter for failed logins.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAuthLogs(2400, 12),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Count per host",
-        narration: "Summarize the number of failures per host.",
-        lesson: "summarize count = count(), by:{host}",
-        goal: "Count failed logins per host.",
-        hint: "Use summarize with count() grouped by host.",
-        sampleData: generateAuthLogs(2400, 12),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "host" }, raw: "summarize count = count(), by:{host}" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Sort by count",
-        narration: "Rank hosts by failure count descending.",
-        lesson: "sort count desc",
-        goal: "Sort hosts by failure count.",
-        hint: "Use sort with count and desc direction.",
-        sampleData: generateAuthLogs(2400, 12),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "host" }, raw: "summarize count = count(), by:{host}" },
-          { id: "e4", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-013",
-    title: "The Amount Audit",
-    company: "EasyTrade",
-    briefing:
-      "Finance wants to know total payment volume by provider. Aggregate payment events and sum the amounts.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Load business events to analyze payment data.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 13),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter payments",
-        narration: "Keep only payment_confirmed events.",
-        lesson: "filter event.type == \"com.easytrade.payment_confirmed\"",
-        goal: "Filter for payment events.",
-        hint: "Filter where event.type equals payment_confirmed.",
-        sampleData: generateBizEvents(2400, 13),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.payment_confirmed\"" }, raw: "filter event.type == \"com.easytrade.payment_confirmed\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Sum by provider",
-        narration: "Sum the amount field grouped by payment method.",
-        lesson: "summarize total = sum(amount), by:{method}",
-        goal: "Calculate total payment volume per provider.",
-        hint: "Use summarize with sum(amount) grouped by method.",
-        sampleData: generateBizEvents(2400, 13),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.payment_confirmed\"" }, raw: "filter event.type == \"com.easytrade.payment_confirmed\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "sum", alias: "total", aggField: "amount", by: "method" }, raw: "summarize total = sum(amount), by:{method}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-014",
-    title: "The Time Bandit",
-    company: "CloudScale",
-    briefing:
-      "Errors are spiking but we do not know when. Build a time series to see the error pattern.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load application logs to analyze the error timeline.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 14),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Keep only ERROR-level logs.",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Show only ERROR logs.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAppLogs(2400, 14),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Make time series",
-        narration: "Bucket the errors into 10-minute intervals.",
-        lesson: "makeTimeseries errors = count(), interval:10m",
-        goal: "Create a time series of errors in 10-minute buckets.",
-        hint: "Use makeTimeseries with count() and interval:10m.",
-        sampleData: generateAppLogs(2400, 14),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "10m" }, raw: "makeTimeseries errors = count(), interval:10m" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-015",
-    title: "The Duration Detective",
-    company: "CloudServices",
-    briefing:
-      "Find the spans with duration over 100ms to identify slow operations.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 15),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter slow spans",
-        narration: "Keep spans where duration exceeds 100000 microseconds (100ms).",
-        lesson: "filter duration > 100000",
-        goal: "Filter spans with duration over 100ms.",
-        hint: "Filter where duration is greater than 100000.",
-        sampleData: generateSpans(2400, 15),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "duration > 100000" }, raw: "filter duration > 100000" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Sort and project",
-        narration: "Sort by duration descending and keep key fields.",
-        lesson: "sort duration desc",
-        goal: "Sort slow spans by duration.",
-        hint: "Use sort with duration desc, then fields to project columns.",
-        sampleData: generateSpans(2400, 15),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "duration > 100000" }, raw: "filter duration > 100000" },
-          { id: "e3", command: "sort", args: { field: "duration", direction: "desc" }, raw: "sort duration desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-016",
-    title: "The Version Vandal",
-    company: "OpsCorp",
-    briefing:
-      "Someone pushed a bad deployment. Find all failed deployment events in a single filter.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Load the system events to hunt for failed deployments.",
-        lesson: "fetch events",
-        goal: "Load system events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 16),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter failed deployments",
-        narration: "Use a compound filter to find deployment events with failure status.",
-        lesson: "filter event.type == \"deployment\" and status == \"failure\"",
-        goal: "Find failed deployment events.",
-        hint: "Use a single filter with and to combine both conditions.",
-        sampleData: generateEvents(2400, 16),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\" and status == \"failure\"" }, raw: "filter event.type == \"deployment\" and status == \"failure\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Project fields",
-        narration: "Keep only service, version, and host for the incident report.",
-        lesson: "fields service, version, host",
-        goal: "Keep service, version, and host columns.",
-        hint: "Use fields to keep only the needed columns.",
-        sampleData: generateEvents(2400, 16),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\" and status == \"failure\"" }, raw: "filter event.type == \"deployment\" and status == \"failure\"" },
-          { id: "e3", command: "fields", args: { fields: "service, version, host" }, raw: "fields service, version, host" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-017",
-    title: "The Product Profiler",
-    company: "EasyTrade",
-    briefing:
-      "We need a revenue and order count breakdown per product from confirmed orders.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Load the business events.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 17),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter orders",
-        narration: "Keep only order_confirmed events.",
-        lesson: "filter event.type == \"com.easytrade.order_confirmed\"",
-        goal: "Filter for order confirmations.",
-        hint: "Filter where event.type equals order_confirmed.",
-        sampleData: generateBizEvents(2400, 17),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.order_confirmed\"" }, raw: "filter event.type == \"com.easytrade.order_confirmed\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Summarize by product",
-        narration: "Count orders and sum revenue per product, then sort by revenue.",
-        lesson: "summarize orders = count(), revenue = sum(amount), by:{product}",
-        goal: "Aggregate orders and revenue per product.",
-        hint: "Use summarize with count() and sum(amount) grouped by product.",
-        sampleData: generateBizEvents(2400, 17),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.order_confirmed\"" }, raw: "filter event.type == \"com.easytrade.order_confirmed\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "orders", by: "product" }, raw: "summarize orders = count(), by:{product}" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Sort by revenue",
-        narration: "Sort products by total revenue descending.",
-        lesson: "sort revenue desc",
-        goal: "Sort products by revenue.",
-        hint: "Use sort with revenue and desc direction.",
-        sampleData: generateBizEvents(2400, 17),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.order_confirmed\"" }, raw: "filter event.type == \"com.easytrade.order_confirmed\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "orders", by: "product" }, raw: "summarize orders = count(), by:{product}" },
-          { id: "e4", command: "sort", args: { field: "orders", direction: "desc" }, raw: "sort orders desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-018",
-    title: "The Return Reason",
-    company: "EasyTrade",
-    briefing:
-      "Orders are being returned. Find out why by analyzing returned close_order events.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Load the business events to investigate returns.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 18),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter returned orders",
-        narration: "Keep only close_order events with returned status.",
-        lesson: "filter event.type == \"com.easytrade.close_order\" and status == \"returned\"",
-        goal: "Find returned orders.",
-        hint: "Use a compound filter for close_order and returned status.",
-        sampleData: generateBizEvents(2400, 18),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.close_order\" and status == \"returned\"" }, raw: "filter event.type == \"com.easytrade.close_order\" and status == \"returned\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Summarize by reason",
-        narration: "Count how many returns fall into each reason category.",
-        lesson: "summarize count = count(), by:{reason}",
-        goal: "Count returns per reason.",
-        hint: "Use summarize with count() grouped by reason.",
-        sampleData: generateBizEvents(2400, 18),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"com.easytrade.close_order\" and status == \"returned\"" }, raw: "filter event.type == \"com.easytrade.close_order\" and status == \"returned\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "reason" }, raw: "summarize count = count(), by:{reason}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-019",
-    title: "The Scale Scout",
-    company: "OpsCorp",
-    briefing:
-      "The platform auto-scaled several services. Sum the instances added per service.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Load system events to analyze scale-ups.",
-        lesson: "fetch events",
-        goal: "Load system events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 19),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter scale-ups",
-        narration: "Keep only scale-up events.",
-        lesson: "filter event.type == \"scale-up\"",
-        goal: "Filter for scale-up events.",
-        hint: "Filter where event.type equals scale-up.",
-        sampleData: generateEvents(2400, 19),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"scale-up\"" }, raw: "filter event.type == \"scale-up\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Sum instances per service",
-        narration: "Aggregate total instances added per service.",
-        lesson: "summarize total_instances = sum(instances), by:{service}",
-        goal: "Sum scale-up instances per service.",
-        hint: "Use summarize with sum(instances) grouped by service.",
-        sampleData: generateEvents(2400, 19),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"scale-up\"" }, raw: "filter event.type == \"scale-up\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "sum", alias: "total_instances", aggField: "instances", by: "service" }, raw: "summarize total_instances = sum(instances), by:{service}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-020",
-    title: "The Conditional Tag",
-    company: "CloudServices",
-    briefing:
-      "Flag spans as slow or fast based on a duration threshold, then filter for the slow ones.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 20),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Add slow flag",
-        narration: "Use fieldsAdd with if() to tag spans slower than 100ms as yes.",
-        lesson: "fieldsAdd is_slow = if(duration > 100000, \"yes\", \"no\")",
-        goal: "Tag spans as slow or fast.",
-        hint: "Use fieldsAdd with an if expression on duration.",
-        sampleData: generateSpans(2400, 20),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "is_slow = if(duration > 100000, \"yes\", \"no\")" }, raw: "fieldsAdd is_slow = if(duration > 100000, \"yes\", \"no\")" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter slow spans",
-        narration: "Keep only the spans tagged as slow.",
-        lesson: "filter is_slow == \"yes\"",
-        goal: "Show only slow spans.",
-        hint: "Filter where is_slow equals yes.",
-        sampleData: generateSpans(2400, 20),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "is_slow = if(duration > 100000, \"yes\", \"no\")" }, raw: "fieldsAdd is_slow = if(duration > 100000, \"yes\", \"no\")" },
-          { id: "e3", command: "filter", args: { condition: "is_slow == \"yes\"" }, raw: "filter is_slow == \"yes\"" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-021",
-    title: "The Rename Game",
-    company: "SecureBank",
-    briefing:
-      "The security team wants the parsed IP field renamed to client_ip for their report. Parse, rename, and count.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch auth logs",
-        narration: "Load the authentication logs.",
-        lesson: "fetch logs",
-        goal: "Load auth logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAuthLogs(2400, 21),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter and parse",
-        narration: "Filter for ERROR entries and parse the attacker IP.",
-        lesson: "filter loglevel == \"ERROR\" | parse content, \"IP:attacker_ip\"",
-        goal: "Extract the attacker IP from error logs.",
-        hint: "Chain filter and parse to get the IP field.",
-        sampleData: generateAuthLogs(2400, 21),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: "parse content, \"IP:attacker_ip\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Rename and count",
-        narration: "Rename attacker_ip to client_ip and count per IP.",
-        lesson: "fieldsRename attacker_ip = client_ip | summarize count = count(), by:{client_ip}",
-        goal: "Rename the field and count failures per client IP.",
-        hint: "Use fieldsRename then summarize by the new field name.",
-        sampleData: generateAuthLogs(2400, 21),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: "parse content, \"IP:attacker_ip\"" },
-          { id: "e4", command: "fieldsRename", args: { assignments: "attacker_ip = client_ip" }, raw: "fieldsRename attacker_ip = client_ip" },
-          { id: "e5", command: "summarize", args: { aggregation: "count", alias: "count", by: "client_ip" }, raw: "summarize count = count(), by:{client_ip}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-022",
-    title: "The Array Expansion",
-    company: "OpsCorp",
-    briefing:
-      "Events carry a tags array. Expand the tags so we can filter for critical events specifically.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Load the tagged system events.",
-        lesson: "fetch events",
-        goal: "Load events with tags.",
-        hint: "Use fetch events.",
-        sampleData: generateEventsWithTags(3000, 22),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Expand tags",
-        narration: "Expand the tags array into individual rows so each tag gets its own record.",
-        lesson: "expand tags",
-        goal: "Expand the tags array into separate rows.",
-        hint: "Use expand with field tags.",
-        sampleData: generateEventsWithTags(3000, 22),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "expand", args: { field: "tags" }, raw: "expand tags" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter critical",
-        narration: "Keep only the rows where the expanded tag equals critical.",
-        lesson: "filter tags == \"critical\"",
-        goal: "Show only critical-tagged events.",
-        hint: "Filter where tags equals critical.",
-        sampleData: generateEventsWithTags(3000, 22),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "expand", args: { field: "tags" }, raw: "expand tags" },
-          { id: "e3", command: "filter", args: { condition: "tags == \"critical\"" }, raw: "filter tags == \"critical\"" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-023",
-    title: "The Parsed Path",
-    company: "CloudScale",
-    briefing:
-      "Some application logs embed the endpoint path in the content. Parse it out and count calls per endpoint.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load the application logs that contain endpoint paths.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 23),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Parse endpoint",
-        narration: "Extract the endpoint path from the content field.",
-        lesson: "parse content, \"STRING:endpoint\"",
-        goal: "Extract endpoint from content.",
-        hint: "Use parse with pattern STRING:endpoint on the content field.",
-        sampleData: generateAppLogs(2400, 23),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:endpoint" }, raw: "parse content, \"STRING:endpoint\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter and count",
-        narration: "Filter for the payment endpoint and count occurrences.",
-        lesson: "filter endpoint == \"/api/payment\" | summarize count = count(), by:{endpoint}",
-        goal: "Count calls to /api/payment.",
-        hint: "Filter for the payment endpoint then summarize by endpoint.",
-        sampleData: generateAppLogs(2400, 23),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:endpoint" }, raw: "parse content, \"STRING:endpoint\"" },
-          { id: "e3", command: "filter", args: { condition: "endpoint == \"/api/payment\"" }, raw: "filter endpoint == \"/api/payment\"" },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "endpoint" }, raw: "summarize count = count(), by:{endpoint}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-024",
-    title: "The Dedup Dilemma",
-    company: "CloudServices",
-    briefing:
-      "We only need one sample span per endpoint for the latency report. Deduplicate by endpoint.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the span data.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 24),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Deduplicate endpoints",
-        narration: "Use dedup to keep only the first span for each endpoint.",
-        lesson: "dedup endpoint",
-        goal: "Remove duplicate endpoints.",
-        hint: "Use dedup with field endpoint.",
-        sampleData: generateSpans(2400, 24),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "dedup", args: { field: "endpoint" }, raw: "dedup endpoint" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Project fields",
-        narration: "Keep endpoint, service.name, and duration for the report.",
-        lesson: "fields endpoint, service.name, duration",
-        goal: "Keep endpoint, service.name, and duration.",
-        hint: "Use fields to keep only the needed columns.",
-        sampleData: generateSpans(2400, 24),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "dedup", args: { field: "endpoint" }, raw: "dedup endpoint" },
-          { id: "e3", command: "fields", args: { fields: "endpoint, service.name, duration" }, raw: "fields endpoint, service.name, duration" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-025",
-    title: "The Top Ten",
-    company: "SecureBank",
-    briefing:
-      "Find the top 10 attacker IPs by failed login count.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch auth logs",
-        narration: "Load the authentication logs.",
-        lesson: "fetch logs",
-        goal: "Load auth logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAuthLogs(2400, 25),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Keep only ERROR-level entries (failed logins).",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Filter for failed logins.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAuthLogs(2400, 25),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Parse IP",
-        narration: "Extract the attacker IP from the content field.",
-        lesson: "parse content, \"IP:attacker_ip\"",
-        goal: "Extract attacker IP.",
-        hint: "Use parse with IP:attacker_ip pattern.",
-        sampleData: generateAuthLogs(2400, 25),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: "parse content, \"IP:attacker_ip\"" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Count and rank",
-        narration: "Count failures per IP, sort descending, and cap at 10.",
-        lesson: "summarize count = count(), by:{attacker_ip} | sort count desc | limit 10",
-        goal: "Get the top 10 attacker IPs.",
-        hint: "Use summarize, sort, and limit in sequence.",
-        sampleData: generateAuthLogs(2400, 25),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "IP:attacker_ip" }, raw: "parse content, \"IP:attacker_ip\"" },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "attacker_ip" }, raw: "summarize count = count(), by:{attacker_ip}" },
-          { id: "e5", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
-          { id: "e6", command: "limit", args: { count: 10 }, raw: "limit 10" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-026",
-    title: "The Average Load",
-    company: "CloudServices",
-    briefing:
-      "Calculate the average latency per endpoint for successful (OK) spans.",
+      "Checkout latency tripled. Someone's queries are stealing database time. Isolate the slow calls, find the worst host, and profile the damage.",
     difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
     steps: [
       {
         id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 26),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
+        title: "Catch the slow queries",
+        narration:
+          "Anything over 1000ms is suspect. Filter the database logs to just those calls.",
+        lesson: "fetch logs\n| filter duration_ms > 1000",
+        goal: "Keep records where duration_ms > 1000.",
+        hint: "filter duration_ms > 1000",
+        sampleData: generateDbLogs(500, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "duration_ms > 1000" }, raw: "filter duration_ms > 1000" },
+        ],
       },
       {
         id: "step-2",
-        title: "Filter OK spans",
-        narration: "Keep only spans with OK status.",
-        lesson: "filter status.code == \"OK\"",
-        goal: "Filter for successful spans.",
-        hint: "Filter where status.code equals OK.",
-        sampleData: generateSpans(2400, 26),
+        title: "Profile the offending hosts",
+        narration:
+          "For the slow calls, compute count, average, and worst-case latency per host in a single summarize.",
+        lesson:
+          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+        goal: "Per host (slow calls only) compute count, avg, and max duration_ms.",
+        hint: "filter duration_ms > 1000 then summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: host",
+        sampleData: generateDbLogs(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"OK\"" }, raw: "filter status.code == \"OK\"" },
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "duration_ms > 1000" }, raw: "filter duration_ms > 1000" },
+          {
+            id: "e3",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "n", aggregation: "count", aggField: "" },
+                { alias: "avg_ms", aggregation: "avg", aggField: "duration_ms" },
+                { alias: "max_ms", aggregation: "max", aggField: "duration_ms" },
+              ],
+              by: "host",
+            },
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          },
         ],
       },
       {
         id: "step-3",
-        title: "Average duration by endpoint",
-        narration: "Compute average duration per endpoint and sort descending.",
-        lesson: "summarize avg_duration = avg(duration), by:{endpoint} | sort avg_duration desc",
-        goal: "Calculate average latency per endpoint.",
-        hint: "Use summarize with avg(duration) grouped by endpoint, then sort.",
-        sampleData: generateSpans(2400, 26),
+        title: "Name the culprit",
+        narration:
+          "Sort the profile by worst-case latency — the host at the top is the one stealing the database.",
+        lesson:
+          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host\n| sort max_ms desc",
+        goal: "Rank the per-host slow-query profile by max_ms, worst-first.",
+        hint: "...summarize ... by: host then sort max_ms desc",
+        sampleData: generateDbLogs(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"OK\"" }, raw: "filter status.code == \"OK\"" },
-          { id: "e3", command: "summarize", args: { aggregation: "avg", alias: "avg_duration", aggField: "duration", by: "endpoint" }, raw: "summarize avg_duration = avg(duration), by:{endpoint}" },
-          { id: "e4", command: "sort", args: { field: "avg_duration", direction: "desc" }, raw: "sort avg_duration desc" },
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "duration_ms > 1000" }, raw: "filter duration_ms > 1000" },
+          {
+            id: "e3",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "n", aggregation: "count", aggField: "" },
+                { alias: "avg_ms", aggregation: "avg", aggField: "duration_ms" },
+                { alias: "max_ms", aggregation: "max", aggField: "duration_ms" },
+              ],
+              by: "host",
+            },
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          },
+          { id: "e4", command: "sort", args: { field: "max_ms", direction: "desc" }, raw: "sort max_ms desc" },
         ],
       },
     ],
   },
   {
-    id: "case-027",
-    title: "The Query Inspector",
-    company: "DataVault",
+    id: "case-inv-004",
+    title: "The Revenue Trail",
+    company: "PayStream",
     briefing:
-      "Parse the query type from database logs and count how many SELECT queries were executed.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch db logs",
-        narration: "Load the database logs.",
-        lesson: "fetch logs",
-        goal: "Load database logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateDbLogs(2400, 27),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Parse query type",
-        narration: "Extract the query_type field from the log content.",
-        lesson: "parse content, \"STRING:query_type\"",
-        goal: "Extract query type from content.",
-        hint: "Use parse with STRING:query_type pattern.",
-        sampleData: generateDbLogs(2400, 27),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: "parse content, \"STRING:query_type\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter and count SELECT",
-        narration: "Filter for SELECT queries and count them.",
-        lesson: "filter query_type == \"SELECT\" | summarize count = count(), by:{query_type}",
-        goal: "Count SELECT queries.",
-        hint: "Filter for SELECT then summarize by query_type.",
-        sampleData: generateDbLogs(2400, 27),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: "parse content, \"STRING:query_type\"" },
-          { id: "e3", command: "filter", args: { condition: "query_type == \"SELECT\"" }, raw: "filter query_type == \"SELECT\"" },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "query_type" }, raw: "summarize count = count(), by:{query_type}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-028",
-    title: "The Error Evolution",
-    company: "CloudScale",
-    briefing:
-      "Track how ERROR logs evolved over time using a 15-minute time series.",
+      "Finance can't reconcile yesterday's takings. Trace the money: extract amounts, total them per gateway, and rank the gateways by revenue.",
     difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load the application logs.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 28),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Keep only ERROR-level logs.",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Show only ERROR logs.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAppLogs(2400, 28),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Make time series",
-        narration: "Aggregate errors into 15-minute buckets.",
-        lesson: "makeTimeseries errors = count(), interval:15m",
-        goal: "Create a 15-minute error time series.",
-        hint: "Use makeTimeseries with count() and interval:15m.",
-        sampleData: generateAppLogs(2400, 28),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "15m" }, raw: "makeTimeseries errors = count(), interval:15m" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-029",
-    title: "The Service Shuffle",
-    company: "OpsCorp",
-    briefing:
-      "List successful deployments and strip out unnecessary fields for the change log.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch events",
-        narration: "Load the system events.",
-        lesson: "fetch events",
-        goal: "Load system events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 29),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter successful deployments",
-        narration: "Keep deployment events with success status using a compound filter.",
-        lesson: "filter event.type == \"deployment\" and status == \"success\"",
-        goal: "Find successful deployments.",
-        hint: "Use a compound filter with and.",
-        sampleData: generateEvents(2400, 29),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\" and status == \"success\"" }, raw: "filter event.type == \"deployment\" and status == \"success\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Remove extra fields",
-        narration: "Drop version and timestamp for a cleaner change log.",
-        lesson: "fieldsRemove version, timestamp",
-        goal: "Remove version and timestamp fields.",
-        hint: "Use fieldsRemove to drop the columns.",
-        sampleData: generateEvents(2400, 29),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: "event.type == \"deployment\" and status == \"success\"" }, raw: "filter event.type == \"deployment\" and status == \"success\"" },
-          { id: "e3", command: "fieldsRemove", args: { fields: "version, timestamp" }, raw: "fieldsRemove version, timestamp" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-030",
-    title: "The Content Extract",
-    company: "DataVault",
-    briefing:
-      "Database logs embed the query type. Parse it and count UPDATE queries.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch db logs",
-        narration: "Load the database logs.",
-        lesson: "fetch logs",
-        goal: "Load database logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateDbLogs(2400, 30),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Parse query type",
-        narration: "Extract query_type from the content field.",
-        lesson: "parse content, \"STRING:query_type\"",
-        goal: "Extract query_type.",
-        hint: "Use parse with STRING:query_type pattern.",
-        sampleData: generateDbLogs(2400, 30),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: "parse content, \"STRING:query_type\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Filter and count UPDATE",
-        narration: "Keep UPDATE queries and count them.",
-        lesson: "filter query_type == \"UPDATE\" | summarize count = count(), by:{query_type}",
-        goal: "Count UPDATE queries.",
-        hint: "Filter for UPDATE then summarize by query_type.",
-        sampleData: generateDbLogs(2400, 30),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: "parse content, \"STRING:query_type\"" },
-          { id: "e3", command: "filter", args: { condition: "query_type == \"UPDATE\"" }, raw: "filter query_type == \"UPDATE\"" },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "query_type" }, raw: "summarize count = count(), by:{query_type}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-031",
-    title: "The Span Sorter",
-    company: "CloudServices",
-    briefing:
-      "Find the top 20 OK spans by duration for performance tuning.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 31),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter OK spans",
-        narration: "Keep only spans with OK status.",
-        lesson: "filter status.code == \"OK\"",
-        goal: "Filter for OK spans.",
-        hint: "Filter where status.code equals OK.",
-        sampleData: generateSpans(2400, 31),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"OK\"" }, raw: "filter status.code == \"OK\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Sort and limit",
-        narration: "Sort by duration descending and cap at 20.",
-        lesson: "sort duration desc | limit 20",
-        goal: "Get the top 20 slowest OK spans.",
-        hint: "Use sort with duration desc, then limit 20.",
-        sampleData: generateSpans(2400, 31),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: "status.code == \"OK\"" }, raw: "filter status.code == \"OK\"" },
-          { id: "e3", command: "sort", args: { field: "duration", direction: "desc" }, raw: "sort duration desc" },
-          { id: "e4", command: "limit", args: { count: 20 }, raw: "limit 20" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-032",
-    title: "The Funnel Fixer",
-    company: "EasyTrade",
-    briefing:
-      "Analyze the order funnel by keeping only order lifecycle events and counting each type.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch business events",
-        narration: "Load the business events.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 32),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter funnel events",
-        narration: "Keep only the three order lifecycle event types using the in operator.",
-        lesson: "filter event.type in array(\"com.easytrade.order_confirmed\",\"com.easytrade.payment_confirmed\",\"com.easytrade.close_order\")",
-        goal: "Keep only order lifecycle events.",
-        hint: "Use filter with in and an array of event types.",
-        sampleData: generateBizEvents(2400, 32),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type in array(\"com.easytrade.order_confirmed\",\"com.easytrade.payment_confirmed\",\"com.easytrade.close_order\")" }, raw: "filter event.type in array(\"com.easytrade.order_confirmed\",\"com.easytrade.payment_confirmed\",\"com.easytrade.close_order\")" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Count by type",
-        narration: "Count how many events exist for each funnel step.",
-        lesson: "summarize count = count(), by:{event.type}",
-        goal: "Count events per funnel step.",
-        hint: "Use summarize with count() grouped by event.type.",
-        sampleData: generateBizEvents(2400, 32),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: "event.type in array(\"com.easytrade.order_confirmed\",\"com.easytrade.payment_confirmed\",\"com.easytrade.close_order\")" }, raw: "filter event.type in array(\"com.easytrade.order_confirmed\",\"com.easytrade.payment_confirmed\",\"com.easytrade.close_order\")" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "event.type" }, raw: "summarize count = count(), by:{event.type}" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-033",
-    title: "The Cleanup Crew",
-    company: "CloudScale",
-    briefing:
-      "Strip down ERROR logs to just the essentials for the incident report.",
-    difficulty: "Beginner",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load the application logs.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 33),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter errors",
-        narration: "Keep only ERROR-level logs.",
-        lesson: "filter loglevel == \"ERROR\"",
-        goal: "Show only ERROR logs.",
-        hint: "Filter where loglevel equals ERROR.",
-        sampleData: generateAppLogs(2400, 33),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Remove content",
-        narration: "Drop the verbose content field and keep only timestamp, loglevel, and host.",
-        lesson: "fieldsRemove content | fields timestamp, loglevel, host",
-        goal: "Remove content and keep only three columns.",
-        hint: "Use fieldsRemove then fields to shape the output.",
-        sampleData: generateAppLogs(2400, 33),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: "loglevel == \"ERROR\"" }, raw: "filter loglevel == \"ERROR\"" },
-          { id: "e3", command: "fieldsRemove", args: { fields: "content" }, raw: "fieldsRemove content" },
-          { id: "e4", command: "fields", args: { fields: "timestamp, loglevel, host" }, raw: "fields timestamp, loglevel, host" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-034",
-    title: "The Peak Predictor",
-    company: "CloudScale",
-    briefing:
-      "Visualize the overall log ingestion volume in 5-minute buckets.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch logs",
-        narration: "Load all application logs.",
-        lesson: "fetch logs",
-        goal: "Load application logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateAppLogs(2400, 34),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Make time series",
-        narration: "Create a 5-minute time series of total log volume.",
-        lesson: "makeTimeseries volume = count(), interval:5m",
-        goal: "Create a 5-minute volume time series.",
-        hint: "Use makeTimeseries with count() and interval:5m.",
-        sampleData: generateAppLogs(2400, 34),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "makeTimeseries", args: { aggregation: "count", alias: "volume", interval: "5m" }, raw: "makeTimeseries volume = count(), interval:5m" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-035",
-    title: "The Memory Mapper",
-    company: "CloudServices",
-    briefing:
-      "Categorize spans as slow or fast and count how many fall into each bucket.",
-    difficulty: "Intermediate",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration: "Load the distributed tracing spans.",
-        lesson: "fetch spans",
-        goal: "Load span data.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 35),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Add category",
-        narration: "Use if() to label spans slower than 100ms as slow, otherwise fast.",
-        lesson: "fieldsAdd category = if(duration > 100000, \"slow\", \"fast\")",
-        goal: "Categorize spans by speed.",
-        hint: "Use fieldsAdd with an if expression.",
-        sampleData: generateSpans(2400, 35),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "category = if(duration > 100000, \"slow\", \"fast\")" }, raw: "fieldsAdd category = if(duration > 100000, \"slow\", \"fast\")" },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Count by category",
-        narration: "Count how many spans fall into each speed category.",
-        lesson: "summarize count = count(), by:{category}",
-        goal: "Count spans per category.",
-        hint: "Use summarize with count() grouped by category.",
-        sampleData: generateSpans(2400, 35),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "category = if(duration > 100000, \"slow\", \"fast\")" }, raw: "fieldsAdd category = if(duration > 100000, \"slow\", \"fast\")" },
-          { id: "e3", command: "summarize", args: { aggregation: "count", alias: "count", by: "category" }, raw: "summarize count = count(), by:{category}" },
-        ],
-      },
-    ],
-  },
-
-  // ─── PREMIUM GAMING CASES (case-036 through case-040) ───────────────────────
-
-  {
-    id: "case-036",
-    title: "The Service Cascade",
-    company: "CloudServices",
-    briefing:
-      "Multiple microservices began throwing errors in a cascading failure pattern. Build a time series grouped by service to see who started it and which service was hit hardest.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration:
-          "The distributed tracing system captured spans across every service. Pull them all — we need to see the full picture.",
-        lesson: "fetch spans",
-        goal: "Load all distributed tracing spans.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 36),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Isolate errors",
-        narration:
-          "We only care about spans that resulted in an ERROR status — these are the ones participating in the cascade.",
-        lesson: 'filter status.code == "ERROR"',
-        goal: "Keep only error spans.",
-        hint: "Filter where status.code equals ERROR.",
-        sampleData: generateSpans(2400, 36),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Time series by service",
-        narration:
-          "Break the error count into 5-minute windows and group by service name. This reveals the cascade timeline — which service went down first.",
-        lesson: "makeTimeseries errors = count(), interval:5m, by:{service.name}",
-        goal: "Create a per-service 5-minute error time series.",
-        hint: "Use makeTimeseries with count(), interval:5m, and by:{service.name}.",
-        sampleData: generateSpans(2400, 36),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "5m", by: "service.name" }, raw: "makeTimeseries errors = count(), interval:5m, by:{service.name}" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Total errors per service",
-        narration:
-          "Collapse the time dimension — sum all errors per service so we can rank which service suffered most.",
-        lesson: "summarize total_errors = sum(errors), by:{service.name}",
-        goal: "Sum errors across all time buckets per service.",
-        hint: "Use summarize with sum(errors) grouped by service.name.",
-        sampleData: generateSpans(2400, 36),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "5m", by: "service.name" }, raw: "makeTimeseries errors = count(), interval:5m, by:{service.name}" },
-          { id: "e4", command: "summarize", args: { aggregation: "sum", alias: "total_errors", aggField: "errors", by: "service.name" }, raw: "summarize total_errors = sum(errors), by:{service.name}" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Rank by impact",
-        narration:
-          "Sort services by total error count descending to immediately see the worst-hit service at the top.",
-        lesson: "sort total_errors desc",
-        goal: "Rank services from most errors to least.",
-        hint: "Use sort with total_errors and desc direction.",
-        sampleData: generateSpans(2400, 36),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", alias: "errors", interval: "5m", by: "service.name" }, raw: "makeTimeseries errors = count(), interval:5m, by:{service.name}" },
-          { id: "e4", command: "summarize", args: { aggregation: "sum", alias: "total_errors", aggField: "errors", by: "service.name" }, raw: "summarize total_errors = sum(errors), by:{service.name}" },
-          { id: "e5", command: "sort", args: { field: "total_errors", direction: "desc" }, raw: "sort total_errors desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-037",
-    title: "The Canary Crisis",
-    company: "OpsCorp",
-    briefing:
-      "A canary deployment went catastrophically wrong. The team suspects a specific version is responsible. Categorize all deployment outcomes and uncover how many were broken versus healthy.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch deployment events",
-        narration:
-          "Pull all system events from the deployment pipeline. The evidence is in there — we just need to surface it.",
-        lesson: "fetch events",
-        goal: "Load all system events.",
-        hint: "Use fetch events.",
-        sampleData: generateEvents(2400, 37),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter deployments only",
-        narration:
-          "Not all events are deployments. Filter down to just the deployment events so we're looking at the right data.",
-        lesson: 'filter event.type == "deployment"',
-        goal: "Keep only deployment events.",
-        hint: "Filter where event.type equals deployment.",
-        sampleData: generateEvents(2400, 37),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "deployment"' }, raw: 'filter event.type == "deployment"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Tag by outcome",
-        narration:
-          "Add a computed field that labels each deployment as broken or healthy based on its status. This makes the pattern immediately obvious.",
-        lesson: 'fieldsAdd outcome = if(status == "failure", "broken", "healthy")',
-        goal: "Label each deployment as broken or healthy.",
-        hint: 'Use fieldsAdd with if(status == "failure", "broken", "healthy").',
-        sampleData: generateEvents(2400, 37),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "deployment"' }, raw: 'filter event.type == "deployment"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'outcome = if(status == "failure", "broken", "healthy")' }, raw: 'fieldsAdd outcome = if(status == "failure", "broken", "healthy")' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Count by outcome",
-        narration:
-          "Summarize how many deployments were broken versus healthy. One number tells the entire story.",
-        lesson: "summarize count = count(), by:{outcome}",
-        goal: "Count deployments per outcome.",
-        hint: "Use summarize with count() grouped by outcome.",
-        sampleData: generateEvents(2400, 37),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "deployment"' }, raw: 'filter event.type == "deployment"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'outcome = if(status == "failure", "broken", "healthy")' }, raw: 'fieldsAdd outcome = if(status == "failure", "broken", "healthy")' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "outcome" }, raw: "summarize count = count(), by:{outcome}" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Rank the damage",
-        narration:
-          "Sort the summary descending so the most common outcome appears first. If broken is on top — escalate immediately.",
-        lesson: "sort count desc",
-        goal: "Show the most frequent outcome first.",
-        hint: "Use sort with count desc.",
-        sampleData: generateEvents(2400, 37),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "deployment"' }, raw: 'filter event.type == "deployment"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'outcome = if(status == "failure", "broken", "healthy")' }, raw: 'fieldsAdd outcome = if(status == "failure", "broken", "healthy")' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "outcome" }, raw: "summarize count = count(), by:{outcome}" },
-          { id: "e5", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-038",
-    title: "The Revenue Heist",
-    company: "EasyTrade",
-    briefing:
-      "Finance flagged a suspicious drop in high-value order revenue. Categorize confirmed payments by tier and calculate total revenue per segment to identify where money is disappearing.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch payment events",
-        narration:
-          "Start by pulling all business events — the payment trail is in here. Every transaction leaves a record.",
-        lesson: "fetch bizevents",
-        goal: "Load business events.",
-        hint: "Use fetch bizevents.",
-        sampleData: generateBizEvents(2400, 38),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" }],
-      },
-      {
-        id: "step-2",
-        title: "Isolate confirmed payments",
-        narration:
-          "Filter down to only payment_confirmed events. We only care about transactions that actually went through.",
-        lesson: 'filter event.type == "com.easytrade.payment_confirmed"',
-        goal: "Keep only confirmed payment events.",
-        hint: "Filter where event.type equals com.easytrade.payment_confirmed.",
-        sampleData: generateBizEvents(2400, 38),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.payment_confirmed"' }, raw: 'filter event.type == "com.easytrade.payment_confirmed"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Classify by tier",
-        narration:
-          "Tag each payment as premium (over 500) or standard based on the transaction amount. This is where the revenue analysis begins.",
-        lesson: 'fieldsAdd tier = if(amount > 500, "premium", "standard")',
-        goal: "Label each payment as premium or standard.",
-        hint: 'Use fieldsAdd with if(amount > 500, "premium", "standard").',
-        sampleData: generateBizEvents(2400, 38),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.payment_confirmed"' }, raw: 'filter event.type == "com.easytrade.payment_confirmed"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'tier = if(amount > 500, "premium", "standard")' }, raw: 'fieldsAdd tier = if(amount > 500, "premium", "standard")' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Sum revenue by tier",
-        narration:
-          "Aggregate the total revenue per tier. If the premium tier revenue is suspiciously low, we have found our anomaly.",
-        lesson: "summarize revenue = sum(amount), by:{tier}",
-        goal: "Calculate total revenue per payment tier.",
-        hint: "Use summarize with sum(amount) grouped by tier.",
-        sampleData: generateBizEvents(2400, 38),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.payment_confirmed"' }, raw: 'filter event.type == "com.easytrade.payment_confirmed"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'tier = if(amount > 500, "premium", "standard")' }, raw: 'fieldsAdd tier = if(amount > 500, "premium", "standard")' },
-          { id: "e4", command: "summarize", args: { aggregation: "sum", alias: "revenue", aggField: "amount", by: "tier" }, raw: "summarize revenue = sum(amount), by:{tier}" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Surface the anomaly",
-        narration:
-          "Sort by revenue descending. If premium generates less than standard — the CFO needs to hear about this now.",
-        lesson: "sort revenue desc",
-        goal: "Show the highest revenue tier first.",
-        hint: "Use sort with revenue desc.",
-        sampleData: generateBizEvents(2400, 38),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
-          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.payment_confirmed"' }, raw: 'filter event.type == "com.easytrade.payment_confirmed"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'tier = if(amount > 500, "premium", "standard")' }, raw: 'fieldsAdd tier = if(amount > 500, "premium", "standard")' },
-          { id: "e4", command: "summarize", args: { aggregation: "sum", alias: "revenue", aggField: "amount", by: "tier" }, raw: "summarize revenue = sum(amount), by:{tier}" },
-          { id: "e5", command: "sort", args: { field: "revenue", direction: "desc" }, raw: "sort revenue desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-039",
-    title: "The Query Killer",
-    company: "DataVault",
-    briefing:
-      "The production database is approaching connection pool exhaustion. Parse out the query types from WARN-level logs and find which query type is responsible for the load spike.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch database logs",
-        narration:
-          "Load the database logs. Thousands of queries are being logged every minute — we need to find the culprit.",
-        lesson: "fetch logs",
-        goal: "Load database logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateDbLogs(2400, 39),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Isolate slow queries",
-        narration:
-          "WARN-level entries mark slow or problematic queries. Filter to just those — that is where the pressure is coming from.",
-        lesson: 'filter loglevel == "WARN"',
-        goal: "Show only WARN-level database entries.",
-        hint: "Filter where loglevel equals WARN.",
-        sampleData: generateDbLogs(2400, 39),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "WARN"' }, raw: 'filter loglevel == "WARN"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Parse the query type",
-        narration:
-          "Each log entry embeds the query type in its content. Extract query_type so we can group by it.",
-        lesson: 'parse content, "STRING:query_type"',
-        goal: "Extract the query_type field from content.",
-        hint: "Use parse with STRING:query_type pattern on the content field.",
-        sampleData: generateDbLogs(2400, 39),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "WARN"' }, raw: 'filter loglevel == "WARN"' },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: 'parse content, "STRING:query_type"' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Count by query type",
-        narration:
-          "Summarize the slow-query count per query type. SELECT or UPDATE — one of them is going rogue.",
-        lesson: "summarize count = count(), by:{query_type}",
-        goal: "Count slow queries per type.",
-        hint: "Use summarize with count() grouped by query_type.",
-        sampleData: generateDbLogs(2400, 39),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "WARN"' }, raw: 'filter loglevel == "WARN"' },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: 'parse content, "STRING:query_type"' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "query_type" }, raw: "summarize count = count(), by:{query_type}" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Expose the top offender",
-        narration:
-          "Sort by count descending to put the worst offending query type at the top. That is the query type to optimize or throttle.",
-        lesson: "sort count desc",
-        goal: "Rank query types by slow count.",
-        hint: "Use sort with count desc.",
-        sampleData: generateDbLogs(2400, 39),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "WARN"' }, raw: 'filter loglevel == "WARN"' },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "STRING:query_type" }, raw: 'parse content, "STRING:query_type"' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", by: "query_type" }, raw: "summarize count = count(), by:{query_type}" },
-          { id: "e5", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-040",
-    title: "The Endpoint Inferno",
-    company: "CloudServices",
-    briefing:
-      "The SLO is breached. Error latency across API endpoints has exploded. Find the top 5 endpoints with the worst average error duration and hand the list to the on-call engineer before the next alert fires.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Fetch spans",
-        narration:
-          "Every API call is traced. Load the spans — the slowest, most broken endpoints are hiding in here.",
-        lesson: "fetch spans",
-        goal: "Load all distributed tracing spans.",
-        hint: "Use fetch spans.",
-        sampleData: generateSpans(2400, 40),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" }],
-      },
-      {
-        id: "step-2",
-        title: "Filter error spans",
-        narration:
-          "Only error spans contribute to the SLO breach. Filter them out — everything else is noise right now.",
-        lesson: 'filter status.code == "ERROR"',
-        goal: "Keep only error spans.",
-        hint: "Filter where status.code equals ERROR.",
-        sampleData: generateSpans(2400, 40),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Average error duration by endpoint",
-        narration:
-          "Calculate the average duration of error spans per endpoint. High average duration means an endpoint is not just failing — it is failing slowly.",
-        lesson: "summarize avg_ms = avg(duration), by:{endpoint}",
-        goal: "Calculate average error duration per endpoint.",
-        hint: "Use summarize with avg(duration) grouped by endpoint.",
-        sampleData: generateSpans(2400, 40),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "summarize", args: { aggregation: "avg", alias: "avg_ms", aggField: "duration", by: "endpoint" }, raw: "summarize avg_ms = avg(duration), by:{endpoint}" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Sort worst first",
-        narration:
-          "Sort the endpoint list by average duration descending. The endpoint at position one is causing the most pain.",
-        lesson: "sort avg_ms desc",
-        goal: "Rank endpoints from slowest to fastest error duration.",
-        hint: "Use sort with avg_ms desc.",
-        sampleData: generateSpans(2400, 40),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "summarize", args: { aggregation: "avg", alias: "avg_ms", aggField: "duration", by: "endpoint" }, raw: "summarize avg_ms = avg(duration), by:{endpoint}" },
-          { id: "e4", command: "sort", args: { field: "avg_ms", direction: "desc" }, raw: "sort avg_ms desc" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Top 5 for the on-call report",
-        narration:
-          "Cap the output to 5 endpoints. This is the actionable shortlist the on-call engineer needs — no fluff, just signal.",
-        lesson: "limit 5",
-        goal: "Keep only the top 5 worst endpoints.",
-        hint: "Use limit with count 5.",
-        sampleData: generateSpans(2400, 40),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "summarize", args: { aggregation: "avg", alias: "avg_ms", aggField: "duration", by: "endpoint" }, raw: "summarize avg_ms = avg(duration), by:{endpoint}" },
-          { id: "e4", command: "sort", args: { field: "avg_ms", direction: "desc" }, raw: "sort avg_ms desc" },
-          { id: "e5", command: "limit", args: { count: 5 }, raw: "limit 5" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-041",
     track: "dql",
     tier: "premium",
-    title: "The Payment Fraud Ring",
-    company: "FinVault",
-    briefing:
-      "A wave of high-value transactions is being declined. Security suspects a coordinated fraud ring. We need to identify which currencies and merchants are most affected.",
-    difficulty: "Advanced",
     steps: [
       {
         id: "step-1",
-        title: "Load payment logs",
+        title: "Surface the amounts",
         narration:
-          "Pull the payment gateway logs. Each line contains transaction details including amount, currency, merchant, and risk flags.",
-        lesson: "fetch logs",
-        goal: "Load all payment gateway logs.",
-        hint: "Use fetch logs.",
-        sampleData: generatePaymentLogs(3000, 41),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
+          "Payment amounts are embedded in the log content. Extract a numeric `amt` column so it can be aggregated.",
+        lesson: "fetch logs\n| fieldsAdd amt = toDouble(content)",
+        goal: "Add a numeric amt column derived from content.",
+        hint: "fieldsAdd amt = toDouble(content)",
+        sampleData: generatePaymentLogs(500, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+        ],
       },
       {
         id: "step-2",
-        title: "Parse transaction fields",
+        title: "Total revenue per gateway",
         narration:
-          "The content field is structured key=value pairs. Parse out amount and currency so we can analyze them.",
-        lesson: 'parse content, "amount:amount currency:currency"',
-        goal: "Extract amount and currency fields from the content.",
-        hint: 'Use parse with amount:amount and currency:currency on the content field.',
-        sampleData: generatePaymentLogs(3000, 41),
+          "Sum the amounts grouped by payment host — the per-gateway takings finance needs to reconcile.",
+        lesson:
+          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: host",
+        goal: "Sum amt grouped by host.",
+        hint: "fieldsAdd amt = toDouble(content) then summarize revenue = sum(amt), by: host",
+        sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "amount:amount currency:currency" }, raw: 'parse content, "amount:amount currency:currency"' },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: host" },
         ],
       },
       {
         id: "step-3",
-        title: "Flag high-risk transactions",
+        title: "Rank the gateways",
         narration:
-          "Add a risk_score field: 'high' if amount is greater than 500, otherwise 'low'. This lets us bucket transactions by risk.",
-        lesson: 'fieldsAdd risk_score = if(amount > 500, "high", "low")',
-        goal: "Create a risk_score field based on transaction amount.",
-        hint: 'Use fieldsAdd with an if() expression.',
-        sampleData: generatePaymentLogs(3000, 41),
+          "Sort by revenue descending so the highest-earning gateway tops the reconciliation report.",
+        lesson:
+          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: host\n| sort revenue desc",
+        goal: "Per-host revenue, ranked highest-first.",
+        hint: "...summarize revenue = sum(amt), by: host then sort revenue desc",
+        sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "amount:amount currency:currency" }, raw: 'parse content, "amount:amount currency:currency"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'risk_score = if(amount > 500, "high", "low")' }, raw: 'fieldsAdd risk_score = if(amount > 500, "high", "low")' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Summarize fraud by currency",
-        narration:
-          "Group by currency and count how many high-risk transactions exist in each. This reveals which markets are being targeted.",
-        lesson: "summarize count = count(), by:{currency}",
-        goal: "Count transactions per currency.",
-        hint: "Use summarize with count() grouped by currency.",
-        sampleData: generatePaymentLogs(3000, 41),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "amount:amount currency:currency" }, raw: 'parse content, "amount:amount currency:currency"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: 'risk_score = if(amount > 500, "high", "low")' }, raw: 'fieldsAdd risk_score = if(amount > 500, "high", "low")' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", aggField: "", by: "currency" }, raw: "summarize count = count(), by:{currency}" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: host" },
+          { id: "e4", command: "sort", args: { field: "revenue", direction: "desc" }, raw: "sort revenue desc" },
         ],
       },
     ],
   },
   {
-    id: "case-042",
+    id: "case-inv-005",
+    title: "The Phantom Orders",
+    company: "Acme Corp",
+    briefing:
+      "Customers report orders that never shipped. Confirmed orders should eventually close. Find the order lifecycle events and quantify how many never reached fulfilment.",
+    difficulty: "Advanced",
     track: "dql",
     tier: "premium",
-    title: "The Crashing Pod Mystery",
-    company: "KubeCorp",
-    briefing:
-      "Multiple pods across namespaces are crashing with OOM errors. We need to find which namespace is the worst offender and which pods are dying most.",
-    difficulty: "Advanced",
     steps: [
       {
         id: "step-1",
-        title: "Load K8s logs",
+        title: "Isolate the closed orders",
         narration:
-          "Fetch the Kubernetes cluster logs. Each line contains namespace, pod name, container, and message.",
-        lesson: "fetch logs",
-        goal: "Load all Kubernetes logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateK8sLogs(3000, 42),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
+          "The `close_order` event marks the end of an order's lifecycle. Filter to just those events.",
+        lesson:
+          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"',
+        goal: "Keep only close_order business events.",
+        hint: 'filter event.type == "com.easytrade.close_order"',
+        sampleData: generateBizEvents(500, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.close_order"' }, raw: 'filter event.type == "com.easytrade.close_order"' },
+        ],
       },
       {
         id: "step-2",
-        title: "Isolate ERROR-level entries",
+        title: "Split fulfilled vs. returned",
         narration:
-          "We only care about actual crashes and failures. Filter for ERROR loglevel.",
-        lesson: 'filter loglevel == "ERROR"',
-        goal: "Keep only ERROR-level logs.",
-        hint: 'Use filter loglevel == "ERROR".',
-        sampleData: generateK8sLogs(3000, 42),
+          "Closed orders carry a `status` of fulfilled or returned. Count each outcome to size the phantom-order problem.",
+        lesson:
+          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| summarize n = count(), by: status',
+        goal: "Among closed orders, count records grouped by status.",
+        hint: 'filter event.type == "com.easytrade.close_order" then summarize n = count(), by: status',
+        sampleData: generateBizEvents(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.close_order"' }, raw: 'filter event.type == "com.easytrade.close_order"' },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status" }, raw: "summarize n = count(), by: status" },
         ],
       },
       {
         id: "step-3",
-        title: "Parse namespace and pod",
+        title: "Quantify the returns",
         narration:
-          "Extract namespace and pod name from the content field so we can group by them.",
-        lesson: 'parse content, "namespace:namespace pod:pod"',
-        goal: "Extract namespace and pod fields.",
-        hint: 'Use parse with namespace:namespace and pod:pod.',
-        sampleData: generateK8sLogs(3000, 42),
+          "Zero in on the `returned` orders and count them — the hard number of phantom orders to report to the business.",
+        lesson:
+          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| filter status == "returned"\n| summarize phantom_orders = count()',
+        goal: "Count closed orders whose status is 'returned'.",
+        hint: 'filter event.type == "com.easytrade.close_order" then filter status == "returned" then summarize phantom_orders = count()',
+        sampleData: generateBizEvents(500, 1),
         expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "namespace:namespace pod:pod" }, raw: 'parse content, "namespace:namespace pod:pod"' },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Count crashes per namespace",
-        narration:
-          "Group by namespace and count errors. Then sort descending to find the worst namespace.",
-        lesson: "summarize count = count(), by:{namespace} | sort count desc",
-        goal: "Find the namespace with the most errors, ranked first.",
-        hint: "Use summarize by namespace, then sort count desc.",
-        sampleData: generateK8sLogs(3000, 42),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "parse", args: { field: "content", pattern: "namespace:namespace pod:pod" }, raw: 'parse content, "namespace:namespace pod:pod"' },
-          { id: "e4", command: "summarize", args: { aggregation: "count", alias: "count", aggField: "", by: "namespace" }, raw: "summarize count = count(), by:{namespace}" },
-          { id: "e5", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "case-043",
-    track: "dql",
-    tier: "premium",
-    title: "The API Quota Thief",
-    company: "CloudScale",
-    briefing:
-      "Some API keys are generating abnormally slow requests. We need to find which keys are consistently above the 300ms SLA threshold and rank them by average latency.",
-    difficulty: "Advanced",
-    steps: [
-      {
-        id: "step-1",
-        title: "Load gateway logs",
-        narration:
-          "Fetch the API gateway access logs. Each line contains the API key, endpoint, latency, and status code.",
-        lesson: "fetch logs",
-        goal: "Load all API gateway logs.",
-        hint: "Use fetch logs.",
-        sampleData: generateApiGatewayLogs(3000, 43),
-        expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
-      },
-      {
-        id: "step-2",
-        title: "Parse latency and api_key",
-        narration:
-          "Extract latency_ms and api_key from the structured content so we can analyze per-key performance.",
-        lesson: 'parse content, "latency_ms:latency_ms api_key:api_key"',
-        goal: "Extract latency_ms and api_key fields.",
-        hint: 'Use parse with latency_ms:latency_ms and api_key:api_key.',
-        sampleData: generateApiGatewayLogs(3000, 43),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "latency_ms:latency_ms api_key:api_key" }, raw: 'parse content, "latency_ms:latency_ms api_key:api_key"' },
-        ],
-      },
-      {
-        id: "step-3",
-        title: "Flag slow requests",
-        narration:
-          "Add a boolean 'slow' field that is true when latency_ms exceeds 300. This marks SLA violations.",
-        lesson: "fieldsAdd slow = if(latency_ms > 300, true, false)",
-        goal: "Mark requests slower than 300ms as slow=true.",
-        hint: "Use fieldsAdd with an if() comparing latency_ms > 300.",
-        sampleData: generateApiGatewayLogs(3000, 43),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "latency_ms:latency_ms api_key:api_key" }, raw: 'parse content, "latency_ms:latency_ms api_key:api_key"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: "slow = if(latency_ms > 300, true, false)" }, raw: "fieldsAdd slow = if(latency_ms > 300, true, false)" },
-        ],
-      },
-      {
-        id: "step-4",
-        title: "Filter SLA violations",
-        narration:
-          "Keep only the slow requests so we can summarize by API key.",
-        lesson: 'filter slow == true',
-        goal: "Keep only rows where slow is true.",
-        hint: 'Use filter slow == true.',
-        sampleData: generateApiGatewayLogs(3000, 43),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "latency_ms:latency_ms api_key:api_key" }, raw: 'parse content, "latency_ms:latency_ms api_key:api_key"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: "slow = if(latency_ms > 300, true, false)" }, raw: "fieldsAdd slow = if(latency_ms > 300, true, false)" },
-          { id: "e4", command: "filter", args: { condition: "slow == true" }, raw: "filter slow == true" },
-        ],
-      },
-      {
-        id: "step-5",
-        title: "Rank worst API keys by average latency",
-        narration:
-          "Group by api_key, compute average latency_ms, and rank the top 5 offenders.",
-        lesson: "summarize avg_latency = avg(latency_ms), by:{api_key} | sort avg_latency desc | limit 5",
-        goal: "Find the top 5 API keys by average latency.",
-        hint: "Use summarize avg() by api_key, then sort desc and limit 5.",
-        sampleData: generateApiGatewayLogs(3000, 43),
-        expectedPipeline: [
-          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "latency_ms:latency_ms api_key:api_key" }, raw: 'parse content, "latency_ms:latency_ms api_key:api_key"' },
-          { id: "e3", command: "fieldsAdd", args: { assignments: "slow = if(latency_ms > 300, true, false)" }, raw: "fieldsAdd slow = if(latency_ms > 300, true, false)" },
-          { id: "e4", command: "filter", args: { condition: "slow == true" }, raw: "filter slow == true" },
-          { id: "e5", command: "summarize", args: { aggregation: "avg", alias: "avg_latency", aggField: "latency_ms", by: "api_key" }, raw: "summarize avg_latency = avg(latency_ms), by:{api_key}" },
-          { id: "e6", command: "sort", args: { field: "avg_latency", direction: "desc" }, raw: "sort avg_latency desc" },
-          { id: "e7", command: "limit", args: { count: 5 }, raw: "limit 5" },
+          { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
+          { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.close_order"' }, raw: 'filter event.type == "com.easytrade.close_order"' },
+          { id: "e3", command: "filter", args: { condition: 'status == "returned"' }, raw: 'filter status == "returned"' },
+          { id: "e4", command: "summarize", args: { alias: "phantom_orders", aggregation: "count", aggField: "", by: "" }, raw: "summarize phantom_orders = count()" },
         ],
       },
     ],

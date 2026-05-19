@@ -77,15 +77,34 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
       args.count = Number(rest) || 100;
       break;
     case "summarize": {
-      const aggMatch = rest.match(/(\w+)\s*=\s*(\w+)\(([^)]*)\)/);
-      if (aggMatch) {
-        args.alias = aggMatch[1];
-        args.aggregation = aggMatch[2];
-        args.aggField = aggMatch[3];
+      // Split by the "by:" keyword
+      const byIdx = rest.search(/\bby\s*:/i);
+      const aggPart = byIdx >= 0 ? rest.slice(0, byIdx).trim() : rest;
+      const byPart  = byIdx >= 0 ? rest.slice(byIdx).replace(/^by\s*:\s*\{?/i, "").replace(/\}$/, "").trim() : "";
+
+      if (byPart) args.by = byPart;
+
+      // Parse all agg expressions: alias = func(field) or func(field)
+      const aggPattern = /(\w+)\s*=\s*(\w+)\(([^)]*)\)/g;
+      const aggs: Array<{ alias: string; aggregation: string; aggField: string; condition?: string }> = [];
+      let m;
+      while ((m = aggPattern.exec(aggPart)) !== null) {
+        aggs.push({ alias: m[1], aggregation: m[2].toLowerCase(), aggField: m[3].trim() });
       }
-      const byMatch = rest.match(/by:\s*\{?([^}]+)\}?/);
-      if (byMatch) {
-        args.by = byMatch[1].trim();
+      // Bare count() with no alias
+      if (aggs.length === 0) {
+        const bareCount = aggPart.match(/count\(\)/i);
+        if (bareCount) aggs.push({ alias: "count", aggregation: "count", aggField: "" });
+      }
+      if (aggs.length === 1) {
+        args.alias = aggs[0].alias;
+        args.aggregation = aggs[0].aggregation;
+        args.aggField = aggs[0].aggField;
+      } else if (aggs.length > 1) {
+        args.aggs = aggs;
+        args.alias = aggs[0].alias;
+        args.aggregation = aggs[0].aggregation;
+        args.aggField = aggs[0].aggField;
       }
       break;
     }
