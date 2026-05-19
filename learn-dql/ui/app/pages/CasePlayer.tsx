@@ -37,7 +37,6 @@ export const CasePlayer = () => {
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isExploration, setIsExploration] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [showSolution, setShowSolution] = useState(false);
 
   const step = scenario?.steps[stepIndex];
 
@@ -47,7 +46,6 @@ export const CasePlayer = () => {
     setResult(null);
     setIsExploration(false);
     setShowHint(false);
-    setShowSolution(false);
   }, [stepIndex, caseId]);
 
   if (!scenario || !step) {
@@ -158,14 +156,23 @@ export const CasePlayer = () => {
       </Flex>
 
       <Surface>
-        <Flex flexDirection="column" padding={16} gap={8}>
-          <Paragraph>{step.narration}</Paragraph>
+        <Flex flexDirection="column" padding={16} gap={12}>
+          <Flex alignItems="center" gap={8}>
+            <Chip>Lesson</Chip>
+            <Strong>{step.lesson}</Strong>
+          </Flex>
+          <Paragraph style={{ lineHeight: 1.6 }}>{step.narration}</Paragraph>
           <Paragraph>
-            <Strong>Lesson:</Strong> {step.lesson}
+            <Strong>Goal: </Strong>{step.goal}
           </Paragraph>
-          <Paragraph>
-            <Strong>Goal:</Strong> {step.goal}
-          </Paragraph>
+          {isDqlStep && (
+            <Flex flexDirection="column" gap={6}>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
+                Reference query — type it in the editor below and run it:
+              </Paragraph>
+              <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
+            </Flex>
+          )}
         </Flex>
       </Surface>
 
@@ -177,7 +184,6 @@ export const CasePlayer = () => {
               Run query
             </Button>
             <Button onClick={() => setShowHint(true)}>Hint</Button>
-            <Button onClick={() => setShowSolution(true)}>Show solution</Button>
           </Flex>
 
           {showHint && (
@@ -185,15 +191,6 @@ export const CasePlayer = () => {
               <Flex padding={12} flexDirection="column" gap={4}>
                 <Strong>Hint</Strong>
                 <Paragraph>{step.hint}</Paragraph>
-              </Flex>
-            </Surface>
-          )}
-
-          {showSolution && (
-            <Surface>
-              <Flex padding={12} flexDirection="column" gap={4}>
-                <Strong>Reference solution</Strong>
-                <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
               </Flex>
             </Surface>
           )}
