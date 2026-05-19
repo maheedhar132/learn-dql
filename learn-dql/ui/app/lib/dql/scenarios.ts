@@ -373,13 +373,13 @@ export const scenarios: Scenario[] = [
         title: "Count per severity",
         narration:
           "Adding `by loglevel` produces one row per severity — the breakdown that drives a log-level pie chart.",
-        lesson: "fetch logs\n| summarize total = count(), by: loglevel",
+        lesson: "fetch logs\n| summarize total = count(), by: {loglevel}",
         goal: "Count records grouped by loglevel.",
-        hint: "summarize total = count(), by: loglevel",
+        hint: "summarize total = count(), by: {loglevel}",
         sampleData: generateAppLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "total", aggregation: "count", aggField: "", by: "loglevel" }, raw: "summarize total = count(), by: loglevel" },
+          { id: "e2", command: "summarize", args: { alias: "total", aggregation: "count", aggField: "", by: "loglevel" }, raw: "summarize total = count(), by: {loglevel}" },
         ],
       },
     ],
@@ -400,14 +400,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Payment amounts live inside the `content` blob, so first surface a numeric column, then `summarize sum()` it per host.",
         lesson:
-          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize total = sum(amt), by: host',
+          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize total = sum(amt), by: {host}',
         goal: "Add a numeric amt column and total it per host.",
-        hint: "fieldsAdd amt = toDouble(content) then summarize total = sum(amt), by: host",
+        hint: "fieldsAdd amt = toDouble(content) then summarize total = sum(amt), by: {host}",
         sampleData: generatePaymentLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "total", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize total = sum(amt), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "total", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize total = sum(amt), by: {host}" },
         ],
       },
       {
@@ -416,14 +416,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Swap `sum()` for `avg()` to get the mean transaction value each payment node processed.",
         lesson:
-          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize avg_amt = avg(amt), by: host',
+          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize avg_amt = avg(amt), by: {host}',
         goal: "Compute the average amt per host.",
-        hint: "summarize avg_amt = avg(amt), by: host",
+        hint: "summarize avg_amt = avg(amt), by: {host}",
         sampleData: generatePaymentLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "avg_amt", aggregation: "avg", aggField: "amt", by: "host" }, raw: "summarize avg_amt = avg(amt), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "avg_amt", aggregation: "avg", aggField: "amt", by: "host" }, raw: "summarize avg_amt = avg(amt), by: {host}" },
         ],
       },
     ],
@@ -443,13 +443,13 @@ export const scenarios: Scenario[] = [
         title: "Minimum latency",
         narration:
           "`min()` returns the smallest value in each group — the best-case query time per database host.",
-        lesson: "fetch logs\n| summarize fastest = min(duration_ms), by: host",
+        lesson: "fetch logs\n| summarize fastest = min(duration_ms), by: {host}",
         goal: "Find the minimum duration_ms per host.",
-        hint: "summarize fastest = min(duration_ms), by: host",
+        hint: "summarize fastest = min(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "fastest", aggregation: "min", aggField: "duration_ms", by: "host" }, raw: "summarize fastest = min(duration_ms), by: host" },
+          { id: "e2", command: "summarize", args: { alias: "fastest", aggregation: "min", aggField: "duration_ms", by: "host" }, raw: "summarize fastest = min(duration_ms), by: {host}" },
         ],
       },
       {
@@ -457,13 +457,13 @@ export const scenarios: Scenario[] = [
         title: "Maximum latency",
         narration:
           "`max()` exposes the worst-case latency per host — the spikes a reliability team must explain.",
-        lesson: "fetch logs\n| summarize slowest = max(duration_ms), by: host",
+        lesson: "fetch logs\n| summarize slowest = max(duration_ms), by: {host}",
         goal: "Find the maximum duration_ms per host.",
-        hint: "summarize slowest = max(duration_ms), by: host",
+        hint: "summarize slowest = max(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "slowest", aggregation: "max", aggField: "duration_ms", by: "host" }, raw: "summarize slowest = max(duration_ms), by: host" },
+          { id: "e2", command: "summarize", args: { alias: "slowest", aggregation: "max", aggField: "duration_ms", by: "host" }, raw: "summarize slowest = max(duration_ms), by: {host}" },
         ],
       },
     ],
@@ -528,13 +528,13 @@ export const scenarios: Scenario[] = [
         title: "Count by level and host",
         narration:
           "Listing two `by` fields produces one row per (loglevel, host) combination — the matrix behind a heatmap.",
-        lesson: "fetch logs\n| summarize n = count(), by: loglevel, host",
+        lesson: "fetch logs\n| summarize n = count(), by: {loglevel, host}",
         goal: "Count records grouped by both loglevel and host.",
-        hint: "summarize n = count(), by: loglevel, host",
+        hint: "summarize n = count(), by: {loglevel, host}",
         sampleData: generateAppLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "loglevel, host" }, raw: "summarize n = count(), by: loglevel, host" },
+          { id: "e2", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "loglevel, host" }, raw: "summarize n = count(), by: {loglevel, host}" },
         ],
       },
       {
@@ -542,14 +542,14 @@ export const scenarios: Scenario[] = [
         title: "Focus on errors per host",
         narration:
           "Filter to ERROR first, then group by host — a tighter view of which hosts are failing and how often.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host',
+        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}',
         goal: "Count ERROR records per host.",
-        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host',
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host}',
         sampleData: generateAppLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: {host}" },
         ],
       },
     ],
@@ -570,9 +570,9 @@ export const scenarios: Scenario[] = [
         narration:
           "A single `summarize` can carry several aggregations. Get both the query volume and the mean latency per host in one pass.",
         lesson:
-          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), by: host",
+          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), by: {host}",
         goal: "Per host, compute both the record count and the average duration_ms.",
-        hint: "summarize n = count(), avg_ms = avg(duration_ms), by: host",
+        hint: "summarize n = count(), avg_ms = avg(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -586,7 +586,7 @@ export const scenarios: Scenario[] = [
               ],
               by: "host",
             },
-            raw: "summarize n = count(), avg_ms = avg(duration_ms), by: host",
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), by: {host}",
           },
         ],
       },
@@ -596,9 +596,9 @@ export const scenarios: Scenario[] = [
         narration:
           "Extend the same summarize with a `max()` to capture the slowest query alongside the count and average.",
         lesson:
-          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
         goal: "Per host, compute count, average, and max of duration_ms.",
-        hint: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+        hint: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -613,7 +613,7 @@ export const scenarios: Scenario[] = [
               ],
               by: "host",
             },
-            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
           },
         ],
       },
@@ -634,13 +634,13 @@ export const scenarios: Scenario[] = [
         title: "Median latency",
         narration:
           "The median is the middle value — far more robust to spikes than the mean. Compute it per database host.",
-        lesson: "fetch logs\n| summarize p50 = median(duration_ms), by: host",
+        lesson: "fetch logs\n| summarize p50 = median(duration_ms), by: {host}",
         goal: "Compute the median duration_ms per host.",
-        hint: "summarize p50 = median(duration_ms), by: host",
+        hint: "summarize p50 = median(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "p50", aggregation: "median", aggField: "duration_ms", by: "host" }, raw: "summarize p50 = median(duration_ms), by: host" },
+          { id: "e2", command: "summarize", args: { alias: "p50", aggregation: "median", aggField: "duration_ms", by: "host" }, raw: "summarize p50 = median(duration_ms), by: {host}" },
         ],
       },
       {
@@ -648,13 +648,13 @@ export const scenarios: Scenario[] = [
         title: "95th percentile",
         narration:
           "`percentile()` describes the tail. The p95 latency is the value 95% of queries stay under — a classic SLO metric.",
-        lesson: "fetch logs\n| summarize p95 = percentile(duration_ms, 95), by: host",
+        lesson: "fetch logs\n| summarize p95 = percentile(duration_ms, 95), by: {host}",
         goal: "Compute the 95th-percentile duration_ms per host.",
-        hint: "summarize p95 = percentile(duration_ms, 95), by: host",
+        hint: "summarize p95 = percentile(duration_ms, 95), by: {host}",
         sampleData: generateDbLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "summarize", args: { alias: "p95", aggregation: "percentile", aggField: "duration_ms", by: "host" }, raw: "summarize p95 = percentile(duration_ms, 95), by: host" },
+          { id: "e2", command: "summarize", args: { alias: "p95", aggregation: "percentile", aggField: "duration_ms", by: "host" }, raw: "summarize p95 = percentile(duration_ms, 95), by: {host}" },
         ],
       },
     ],
@@ -740,9 +740,9 @@ export const scenarios: Scenario[] = [
         narration:
           "Derived columns behave like any other — group by `severity_flag` to count critical vs. normal traffic.",
         lesson:
-          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")\n| summarize n = count(), by: severity_flag',
+          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")\n| summarize n = count(), by: {severity_flag}',
         goal: "Count records grouped by the derived severity_flag.",
-        hint: "fieldsAdd severity_flag = ... then summarize n = count(), by: severity_flag",
+        hint: "fieldsAdd severity_flag = ... then summarize n = count(), by: {severity_flag}",
         sampleData: generateAppLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -752,7 +752,7 @@ export const scenarios: Scenario[] = [
             args: { assignments: 'severity_flag = if(loglevel == "ERROR", "critical", "normal")' },
             raw: 'fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
           },
-          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "severity_flag" }, raw: "summarize n = count(), by: severity_flag" },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "severity_flag" }, raw: "summarize n = count(), by: {severity_flag}" },
         ],
       },
     ],
@@ -1098,14 +1098,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Now every record has a `status_clean`, so a `summarize ... by status_clean` produces a complete, gap-free breakdown.",
         lesson:
-          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")\n| summarize n = count(), by: status_clean',
+          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")\n| summarize n = count(), by: {status_clean}',
         goal: "Count events grouped by the backfilled status_clean.",
-        hint: 'fieldsAdd status_clean = coalesce(status, "none") then summarize n = count(), by: status_clean',
+        hint: 'fieldsAdd status_clean = coalesce(status, "none") then summarize n = count(), by: {status_clean}',
         sampleData: generateEventsWithTags(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
           { id: "e2", command: "fieldsAdd", args: { assignments: 'status_clean = coalesce(status, "none")' }, raw: 'fieldsAdd status_clean = coalesce(status, "none")' },
-          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status_clean" }, raw: "summarize n = count(), by: status_clean" },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status_clean" }, raw: "summarize n = count(), by: {status_clean}" },
         ],
       },
     ],
@@ -1172,14 +1172,14 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Spans per service over time",
         narration:
-          "Adding `by: service.name` yields one series per service — a multi-line chart instead of a single line.",
-        lesson: "fetch spans\n| makeTimeseries n = count(), by: service.name, interval: 15m",
+          "Adding `by: {service.name}` yields one series per service — a multi-line chart instead of a single line.",
+        lesson: "fetch spans\n| makeTimeseries n = count(), by: {service.name}, interval: 15m",
         goal: "Produce a 15-minute count timeseries split by service.name.",
-        hint: "makeTimeseries n = count(), by: service.name, interval: 15m",
+        hint: "makeTimeseries n = count(), by: {service.name}, interval: 15m",
         sampleData: generateSpans(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
-          { id: "e2", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: service.name, interval: 15m" },
+          { id: "e2", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: {service.name}, interval: 15m" },
         ],
       },
       {
@@ -1188,14 +1188,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Filter to failing spans first, then split by service to see which service owns the failures.",
         lesson:
-          'fetch spans\n| filter status.code == "ERROR"\n| makeTimeseries n = count(), by: service.name, interval: 15m',
+          'fetch spans\n| filter status.code == "ERROR"\n| makeTimeseries n = count(), by: {service.name}, interval: 15m',
         goal: "Timeseries of ERROR spans, split by service.name, 15m buckets.",
-        hint: 'filter status.code == "ERROR" then makeTimeseries n = count(), by: service.name, interval: 15m',
+        hint: 'filter status.code == "ERROR" then makeTimeseries n = count(), by: {service.name}, interval: 15m',
         sampleData: generateSpans(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "spans" }, raw: "fetch spans" },
           { id: "e2", command: "filter", args: { condition: 'status.code == "ERROR"' }, raw: 'filter status.code == "ERROR"' },
-          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: service.name, interval: 15m" },
+          { id: "e3", command: "makeTimeseries", args: { aggregation: "count", aggField: "", interval: "15m", alias: "n", by: "service.name" }, raw: "makeTimeseries n = count(), by: {service.name}, interval: 15m" },
         ],
       },
     ],
@@ -1220,14 +1220,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Start by isolating failures and counting them per host — the raw material for a ranking.",
         lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host',
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}',
         goal: "Count ERROR records per host.",
-        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host',
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host}',
         sampleData: generateAuthLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: {host}" },
         ],
       },
       {
@@ -1236,14 +1236,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Sort the aggregated result descending so the host with the most failed logins lands on top.",
         lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host\n| sort errors desc',
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}\n| sort errors desc',
         goal: "Produce the per-host error counts ordered worst-first.",
-        hint: "...summarize errors = count(), by: host then sort errors desc",
+        hint: "...summarize errors = count(), by: {host then sort errors desc}",
         sampleData: generateAuthLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: {host}" },
           { id: "e4", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
         ],
       },
@@ -1279,9 +1279,9 @@ export const scenarios: Scenario[] = [
         narration:
           "Add an `is_error` flag with `if()`, then summarize by it — error vs. non-error volume after noise removal.",
         lesson:
-          'fetch logs\n| filterOut loglevel == "DEBUG"\n| fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")\n| summarize n = count(), by: is_error',
+          'fetch logs\n| filterOut loglevel == "DEBUG"\n| fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")\n| summarize n = count(), by: {is_error}',
         goal: "After dropping DEBUG, count records grouped by an is_error flag.",
-        hint: 'filterOut DEBUG, fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no"), summarize n = count(), by: is_error',
+        hint: 'filterOut DEBUG, fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no"), summarize n = count(), by: {is_error}',
         sampleData: generateAppLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1292,7 +1292,7 @@ export const scenarios: Scenario[] = [
             args: { assignments: 'is_error = if(loglevel == "ERROR", "yes", "no")' },
             raw: 'fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")',
           },
-          { id: "e4", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "is_error" }, raw: "summarize n = count(), by: is_error" },
+          { id: "e4", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "is_error" }, raw: "summarize n = count(), by: {is_error}" },
         ],
       },
     ],
@@ -1379,9 +1379,9 @@ export const scenarios: Scenario[] = [
         narration:
           "Aggregate count, average, and max per host, then sort by the worst-case latency to rank the problem hosts.",
         lesson:
-          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host\n| sort max_ms desc',
+          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}\n| sort max_ms desc',
         goal: "Per host, compute count/avg/max of duration_ms for slow non-debug queries, ranked by max_ms.",
-        hint: "...summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: host then sort max_ms desc",
+        hint: "...summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: {host then sort max_ms desc}",
         sampleData: generateDbLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1402,7 +1402,7 @@ export const scenarios: Scenario[] = [
               ],
               by: "host",
             },
-            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
           },
           { id: "e4", command: "sort", args: { field: "max_ms", direction: "desc" }, raw: "sort max_ms desc" },
         ],
@@ -1459,15 +1459,15 @@ export const scenarios: Scenario[] = [
         narration:
           "Count the admin-targeted failures per host and sort descending — the top row is where the attacker concentrated.",
         lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")\n| summarize hits = count(), by: host\n| sort hits desc',
+          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")\n| summarize hits = count(), by: {host}\n| sort hits desc',
         goal: "Per host, count admin-targeted ERROR logins, ranked worst-first.",
-        hint: '...filter contains(content, "user=admin") then summarize hits = count(), by: host then sort hits desc',
+        hint: '...filter contains(content, "user=admin") then summarize hits = count(), by: {host then sort hits desc}',
         sampleData: generateAuthLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
           { id: "e3", command: "filter", args: { condition: 'contains(content, "user=admin")' }, raw: 'filter contains(content, "user=admin")' },
-          { id: "e4", command: "summarize", args: { alias: "hits", aggregation: "count", aggField: "", by: "host" }, raw: "summarize hits = count(), by: host" },
+          { id: "e4", command: "summarize", args: { alias: "hits", aggregation: "count", aggField: "", by: "host" }, raw: "summarize hits = count(), by: {host}" },
           { id: "e5", command: "sort", args: { field: "hits", direction: "desc" }, raw: "sort hits desc" },
         ],
       },
@@ -1503,14 +1503,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Count errors per host and rank — the host at the top is where the on-call should look first.",
         lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: host\n| sort errors desc',
+          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}\n| sort errors desc',
         goal: "Per host, count ERROR records, ranked worst-first.",
-        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: host then sort errors desc',
+        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host then sort errors desc}',
         sampleData: generateAppLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "host" }, raw: "summarize errors = count(), by: {host}" },
           { id: "e4", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
         ],
       },
@@ -1562,9 +1562,9 @@ export const scenarios: Scenario[] = [
         narration:
           "For the slow calls, compute count, average, and worst-case latency per host in a single summarize.",
         lesson:
-          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
         goal: "Per host (slow calls only) compute count, avg, and max duration_ms.",
-        hint: "filter duration_ms > 1000 then summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: host",
+        hint: "filter duration_ms > 1000 then summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: {host}",
         sampleData: generateDbLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1580,7 +1580,7 @@ export const scenarios: Scenario[] = [
               ],
               by: "host",
             },
-            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
           },
         ],
       },
@@ -1590,9 +1590,9 @@ export const scenarios: Scenario[] = [
         narration:
           "Sort the profile by worst-case latency — the host at the top is the one stealing the database.",
         lesson:
-          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host\n| sort max_ms desc",
+          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}\n| sort max_ms desc",
         goal: "Rank the per-host slow-query profile by max_ms, worst-first.",
-        hint: "...summarize ... by: host then sort max_ms desc",
+        hint: "...summarize ... by: {host then sort max_ms desc}",
         sampleData: generateDbLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1608,7 +1608,7 @@ export const scenarios: Scenario[] = [
               ],
               by: "host",
             },
-            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: host",
+            raw: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
           },
           { id: "e4", command: "sort", args: { field: "max_ms", direction: "desc" }, raw: "sort max_ms desc" },
         ],
@@ -1645,14 +1645,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Sum the amounts grouped by payment host — the per-gateway takings finance needs to reconcile.",
         lesson:
-          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: host",
+          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: {host}",
         goal: "Sum amt grouped by host.",
-        hint: "fieldsAdd amt = toDouble(content) then summarize revenue = sum(amt), by: host",
+        hint: "fieldsAdd amt = toDouble(content) then summarize revenue = sum(amt), by: {host}",
         sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: {host}" },
         ],
       },
       {
@@ -1661,14 +1661,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Sort by revenue descending so the highest-earning gateway tops the reconciliation report.",
         lesson:
-          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: host\n| sort revenue desc",
+          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: {host}\n| sort revenue desc",
         goal: "Per-host revenue, ranked highest-first.",
-        hint: "...summarize revenue = sum(amt), by: host then sort revenue desc",
+        hint: "...summarize revenue = sum(amt), by: {host then sort revenue desc}",
         sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: host" },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: {host}" },
           { id: "e4", command: "sort", args: { field: "revenue", direction: "desc" }, raw: "sort revenue desc" },
         ],
       },
@@ -1705,14 +1705,14 @@ export const scenarios: Scenario[] = [
         narration:
           "Closed orders carry a `status` of fulfilled or returned. Count each outcome to size the phantom-order problem.",
         lesson:
-          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| summarize n = count(), by: status',
+          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| summarize n = count(), by: {status}',
         goal: "Among closed orders, count records grouped by status.",
-        hint: 'filter event.type == "com.easytrade.close_order" then summarize n = count(), by: status',
+        hint: 'filter event.type == "com.easytrade.close_order" then summarize n = count(), by: {status}',
         sampleData: generateBizEvents(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "bizevents" }, raw: "fetch bizevents" },
           { id: "e2", command: "filter", args: { condition: 'event.type == "com.easytrade.close_order"' }, raw: 'filter event.type == "com.easytrade.close_order"' },
-          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status" }, raw: "summarize n = count(), by: status" },
+          { id: "e3", command: "summarize", args: { alias: "n", aggregation: "count", aggField: "", by: "status" }, raw: "summarize n = count(), by: {status}" },
         ],
       },
       {
