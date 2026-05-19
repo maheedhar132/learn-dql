@@ -454,7 +454,7 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
   const clean = expr.trim();
 
   // Function calls
-  const fnMatch = clean.match(/^(\w+)\((.*))\)$/s);
+  const fnMatch = clean.match(/^(\w+)\((.*)\)$/s);
   if (fnMatch) {
     const fn = fnMatch[1].toLowerCase();
     const rawArgs = fnMatch[2];
