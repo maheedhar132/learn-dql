@@ -50,8 +50,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Fetch logs",
         narration:
-          "Every DQL query starts by selecting a data source. `fetch logs` loads the raw log records that the rest of the pipeline will refine.",
-        lesson: "fetch logs",
+          "In DQL, every query starts with a `fetch` command that tells the engine which data store to read from. Logs are the most common source — they capture everything your application writes to stdout, stderr, or a logging framework. At Acme Corp, logs record service activity, errors, and diagnostic messages across every host. Without specifying a source, DQL has nothing to work with, so `fetch logs` is always your first move when investigating application behavior.",
+        lesson: "Fetch Application Logs",
         goal: "Load the application log records into the pipeline.",
         hint: "fetch logs",
         sampleData: generateAppLogs(200, 1),
@@ -63,8 +63,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Fetch spans",
         narration:
-          "Distributed traces are made of spans. Switching the source to `spans` lets you analyze request latency instead of log lines.",
-        lesson: "fetch spans",
+          "Distributed tracing breaks a request into individual spans — one per service hop. Each span records its start time, duration, status code, and the service that produced it. When Acme's checkout flow is slow, logs might tell you something went wrong, but spans tell you *where* in the call chain the time was lost. Switch your source to `spans` whenever latency or request flow is the question.",
+        lesson: "Fetch Distributed Trace Spans",
         goal: "Load span (trace) records instead of logs.",
         hint: "fetch spans",
         sampleData: generateSpans(200, 1),
@@ -76,8 +76,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Fetch business events",
         narration:
-          "Business events capture domain activity like orders and payments. `fetch bizevents` is the source for revenue and funnel analysis.",
-        lesson: "fetch bizevents",
+          "Business events capture domain-level activity — things like order placements, payment completions, and account changes. Unlike logs (which are free-form text) or spans (which focus on latency), business events carry structured fields like `order_id`, `amount`, `currency`, and `customer_tier`. At Acme Corp they flow from every service that touches a transaction, making them the right source for revenue and funnel analysis.",
+        lesson: "Fetch Business Event Records",
         goal: "Load business event records.",
         hint: "fetch bizevents",
         sampleData: generateBizEvents(200, 1),
@@ -101,8 +101,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Filter by equality",
         narration:
-          "The `==` operator keeps only records whose field matches a value exactly. Start by isolating failed logins (ERROR level).",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+          "The `filter` command narrows the pipeline to records that satisfy a condition, discarding everything else. The `==` operator tests for an exact match on a field value. In SecureBank's authentication logs, every failed login attempt is recorded with `loglevel` set to `\"ERROR\"`. Isolating those records is the first step in any security investigation — you want signal, not noise.",
+        lesson: "Filter by Log Level",
         goal: "Keep only ERROR-level authentication records.",
         hint: 'filter loglevel == "ERROR"',
         sampleData: generateAuthLogs(300, 1),
@@ -115,8 +115,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Filter by inequality",
         narration:
-          "`!=` is the inverse — it removes the matching records. Use it to drop the noisy DEBUG entries so only meaningful events remain.",
-        lesson: 'fetch logs\n| filter loglevel != "DEBUG"',
+          "The `!=` operator is the inverse of `==` — it keeps every record that does *not* match the value. SecureBank's auth logs emit a high volume of DEBUG messages during normal operation, which obscure the meaningful events. Excluding them with `!=` is faster than listing every level you *do* want, and it future-proofs the query if new levels are added later.",
+        lesson: "Exclude Records by Value",
         goal: "Exclude DEBUG records, keeping everything else.",
         hint: 'filter loglevel != "DEBUG"',
         sampleData: generateAuthLogs(300, 1),
@@ -129,8 +129,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Combine equality with a substring match",
         narration:
-          "Filters compose. Combine an exact level match with a `contains()` check on the message to find failed logins specifically targeting the admin account.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR" and contains(content, "user=admin")',
+          "DQL filter conditions compose with `and` and `or`, letting you express precise multi-dimensional criteria in a single step. Here you need both a severity check (`loglevel == \"ERROR\"`) and a content check (`contains(content, \"user=admin\")`) to zero in on failed admin logins specifically. Combining them avoids two separate filter stages and keeps the pipeline readable. At SecureBank, this pattern separates a targeted brute-force attempt from ordinary user errors.",
+        lesson: "Combine Filter Conditions",
         goal: "Keep ERROR records whose content mentions the admin user.",
         hint: 'filter loglevel == "ERROR" and contains(content, "user=admin")',
         sampleData: generateAuthLogs(300, 1),
@@ -160,8 +160,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Remove healthy traffic",
         narration:
-          "`filterOut` keeps every record that does NOT match the condition — perfect for stripping out successful INFO traffic before an investigation.",
-        lesson: 'fetch logs\n| filterOut loglevel == "INFO"',
+          "`filterOut` is the logical opposite of `filter` — it *removes* every record that matches the condition and passes everything else through. This is useful when you know exactly what you want to drop but would need a long list of `==` clauses to describe what you want to keep. CloudScale's INFO logs are high-volume heartbeat traffic; stripping them in one line reveals the warnings, errors, and debug diagnostics that actually need attention.",
+        lesson: "Subtract Matching Records",
         goal: "Drop INFO records, keeping warnings, errors, and debug.",
         hint: 'filterOut loglevel == "INFO"',
         sampleData: generateAppLogs(300, 1),
@@ -174,8 +174,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Free-text search",
         narration:
-          "`search` scans every field for a term without naming a column — ideal when you do not yet know where the signal lives. Hunt for timeout problems.",
-        lesson: 'fetch logs\n| search "timeout"',
+          "`search` scans every field in every record for a term — you do not need to know which column holds the value. It is the DQL equivalent of Ctrl+F across your entire dataset. When CloudScale engineers suspect a timeout problem but do not know yet which service or field is involved, `search \"timeout\"` casts the widest net possible. Use it early in an investigation to discover the shape of the data before writing precise filters.",
+        lesson: "Full-Text Search Records",
         goal: "Find every record that mentions a timeout anywhere.",
         hint: 'search "timeout"',
         sampleData: generateAppLogs(300, 1),
@@ -188,8 +188,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Search then subtract",
         narration:
-          "Pipelines flow left to right. Search broadly, then `filterOut` the DEBUG diagnostics that also mention the term to keep only actionable hits.",
-        lesson: 'fetch logs\n| search "connection"\n| filterOut loglevel == "DEBUG"',
+          "DQL pipelines execute left to right, so each command receives only what the previous one passed through. You can search broadly for a term and then use `filterOut` to remove the false positives — a two-step triage that is more flexible than a single compound condition. At CloudScale, searching for `\"connection\"` matches both real errors and the verbose DEBUG diagnostics that also reference connections; the `filterOut` in the second step keeps only the actionable hits.",
+        lesson: "Search Then Refine Results",
         goal: "Find connection-related records but exclude DEBUG diagnostics.",
         hint: 'search "connection" then filterOut loglevel == "DEBUG"',
         sampleData: generateAppLogs(300, 1),
@@ -219,8 +219,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Sort ascending",
         narration:
-          "`sort` orders records by a field. Ascending puts the smallest values first — start by sorting database calls from fastest to slowest.",
-        lesson: "fetch logs\n| sort duration_ms asc",
+          "`sort` reorders the records in the pipeline by a field's value. The `asc` direction puts the smallest value first and works on numbers, strings, and timestamps alike. For DataForge's database logs, sorting `duration_ms` ascending gives you a baseline — it shows that the fast queries are working fine and helps you understand the normal range before you go looking for outliers.",
+        lesson: "Sort Records Ascending",
         goal: "Order database records by duration, fastest first.",
         hint: "sort duration_ms asc",
         sampleData: generateDbLogs(300, 1),
@@ -233,8 +233,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Sort descending",
         narration:
-          "Flip the direction to `desc` to surface the worst offenders first — the slow queries the DBA actually cares about.",
-        lesson: "fetch logs\n| sort duration_ms desc",
+          "Flipping the direction to `desc` reverses the order so the largest values appear first. This is the standard way to surface outliers in a dataset — the slowest queries, the most frequent errors, or the highest transaction amounts all float to the top. DataForge's DBA uses descending `duration_ms` to immediately see which database calls are stealing the most time without scanning the entire result set.",
+        lesson: "Sort Records Descending",
         goal: "Order database records by duration, slowest first.",
         hint: "sort duration_ms desc",
         sampleData: generateDbLogs(300, 1),
@@ -247,8 +247,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Top N",
         narration:
-          "Pairing a descending sort with `limit` produces a Top-N list — the ten slowest queries, ready for a dashboard tile.",
-        lesson: "fetch logs\n| sort duration_ms desc\n| limit 10",
+          "`limit` caps the number of records that flow out of the pipeline. Combining a descending sort with a `limit` is the classic Top-N pattern — you rank all records by some measure, then keep only the worst (or best) handful. At DataForge, `sort duration_ms desc | limit 10` produces an actionable short-list of the ten slowest queries that is ready to drop into a dashboard tile or an incident ticket.",
+        lesson: "Return Top N Records",
         goal: "Return only the 10 slowest database records.",
         hint: "sort duration_ms desc then limit 10",
         sampleData: generateDbLogs(300, 1),
@@ -274,8 +274,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Keep only what matters",
         narration:
-          "`fields` (a.k.a. `fieldsKeep`) projects a record down to a named set of columns, discarding everything else.",
-        lesson: "fetch logs\n| fields timestamp, loglevel, host",
+          "`fields` (also written `fieldsKeep`) projects each record down to only the columns you name, discarding the rest. This is important both for readability and for performance — fewer columns means less data moving through the pipeline. CloudScale's app logs have several fields, but when you are investigating an incident you typically only care about when it happened (`timestamp`), how severe it was (`loglevel`), and which machine was involved (`host`).",
+        lesson: "Select Specific Columns",
         goal: "Reduce each record to just timestamp, loglevel, and host.",
         hint: "fields timestamp, loglevel, host",
         sampleData: generateAppLogs(250, 1),
@@ -288,8 +288,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Drop a noisy column",
         narration:
-          "When you want everything *except* one column, `fieldsRemove` is faster than listing what to keep. Drop the verbose `content` blob.",
-        lesson: "fetch logs\n| fieldsRemove content",
+          "When a record has many useful fields but one verbose outlier, `fieldsRemove` is more concise than listing everything you want to keep. It drops the named columns and passes the rest through unchanged. CloudScale's `content` field stores the full log message text, which can be hundreds of characters long; removing it lets you see the structured fields clearly without scrolling past walls of text.",
+        lesson: "Drop Unwanted Columns",
         goal: "Remove the content field, keeping all other columns.",
         hint: "fieldsRemove content",
         sampleData: generateAppLogs(250, 1),
@@ -314,8 +314,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Rename a column",
         narration:
-          "`fieldsRename` gives a column a report-friendly name. Rename the raw `duration_ms` to `latency_ms`.",
-        lesson: "fetch logs\n| fieldsRename latency_ms = duration_ms",
+          "`fieldsRename` gives an existing column a new name without changing its values. This matters when raw field names are implementation details (like `duration_ms`) that you want to replace with something a stakeholder will understand at a glance (like `latency_ms`). The syntax is `newName = oldName` — the same assignment style you will see throughout DQL. At DataForge, renaming before sharing a query result prevents confusion about units and meaning.",
+        lesson: "Rename a Column",
         goal: "Rename duration_ms to latency_ms.",
         hint: "fieldsRename latency_ms = duration_ms",
         sampleData: generateDbLogs(250, 1),
@@ -328,8 +328,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Derive a new metric",
         narration:
-          "`fieldsAdd` computes a new column from an expression. Convert milliseconds to seconds by dividing by 1000.",
-        lesson: "fetch logs\n| fieldsAdd duration_s = duration_ms / 1000",
+          "`fieldsAdd` computes a new column from an arithmetic or function expression and appends it to every record. The original fields remain intact alongside the new one. Converting `duration_ms` to seconds by dividing by 1000 is a simple example, but the same pattern handles anything from unit conversions to ratio calculations. DataForge reports prefer seconds over milliseconds for readability, so this single line transforms the whole dataset.",
+        lesson: "Derive a Calculated Column",
         goal: "Add a duration_s column equal to duration_ms / 1000.",
         hint: "fieldsAdd duration_s = duration_ms / 1000",
         sampleData: generateDbLogs(250, 1),
@@ -356,10 +356,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Total count",
+        title: "Count All Records",
         narration:
-          "`summarize count()` collapses every record into a single number — the total volume of logs.",
-        lesson: "fetch logs\n| summarize total = count()",
+          "`summarize` is DQL's aggregation command — it collapses a set of records into a smaller set of summary rows. The simplest form, `count()`, counts every record that reached that stage of the pipeline and returns a single number. At CloudScale this is the first question in any capacity review: how many log lines are being produced? A single `summarize total = count()` gives you that answer in one pass.",
+        lesson: "Count All Records",
         goal: "Compute the total number of log records.",
         hint: "summarize total = count()",
         sampleData: generateAppLogs(300, 1),
@@ -372,8 +372,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Count per severity",
         narration:
-          "Adding `by loglevel` produces one row per severity — the breakdown that drives a log-level pie chart.",
-        lesson: "fetch logs\n| summarize total = count(), by: {loglevel}",
+          "Adding a `by` clause to `summarize` groups the records before aggregating, producing one output row per distinct group value. `by: {loglevel}` splits CloudScale's logs into separate rows for DEBUG, INFO, WARN, and ERROR — the breakdown that powers a severity distribution chart. This is one of the most frequently used patterns in DQL: count something, broken down by a dimension.",
+        lesson: "Group by Single Field",
         goal: "Count records grouped by loglevel.",
         hint: "summarize total = count(), by: {loglevel}",
         sampleData: generateAppLogs(300, 1),
@@ -396,11 +396,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Derive the amount, then sum it",
+        title: "Sum Values by Group",
         narration:
-          "Payment amounts live inside the `content` blob, so first surface a numeric column, then `summarize sum()` it per host.",
-        lesson:
-          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize total = sum(amt), by: {host}',
+          "`sum()` adds up all the values of a numeric field within each group. It is the go-to aggregation whenever you need a total — revenue, bytes transferred, error counts, or anything else that accumulates. At PayStream, payment amounts are embedded in the `content` field as strings, so a `fieldsAdd` step first extracts a numeric `amt` column with `toDouble()`. Once you have a proper number, `summarize total = sum(amt), by: {host}` computes the per-gateway totals finance needs.",
+        lesson: "Sum Values by Group",
         goal: "Add a numeric amt column and total it per host.",
         hint: "fieldsAdd amt = toDouble(content) then summarize total = sum(amt), by: {host}",
         sampleData: generatePaymentLogs(300, 1),
@@ -412,11 +411,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Average per host",
+        title: "Average Values by Group",
         narration:
-          "Swap `sum()` for `avg()` to get the mean transaction value each payment node processed.",
-        lesson:
-          'fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize avg_amt = avg(amt), by: {host}',
+          "`avg()` divides the sum of a field by the count of records in each group, giving you the mean. Where `sum()` answers 'how much in total?', `avg()` answers 'how much on average?' — a useful complement for spotting whether one gateway is processing unusually large or small transactions. At PayStream, swapping `sum()` for `avg()` in the same query shape reveals the mean transaction size each payment node is handling.",
+        lesson: "Average Values by Group",
         goal: "Compute the average amt per host.",
         hint: "summarize avg_amt = avg(amt), by: {host}",
         sampleData: generatePaymentLogs(300, 1),
@@ -440,10 +438,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Minimum latency",
+        title: "Find Minimum Value",
         narration:
-          "`min()` returns the smallest value in each group — the best-case query time per database host.",
-        lesson: "fetch logs\n| summarize fastest = min(duration_ms), by: {host}",
+          "`min()` returns the smallest value of a field within each group. In performance analysis it represents the best-case result — the floor below which things never go. For DataForge's database logs, `min(duration_ms)` per host tells you how fast that host can execute a query under ideal conditions. This baseline is useful when comparing against current performance: if the minimum is now worse than it used to be, something has changed.",
+        lesson: "Find Minimum Value",
         goal: "Find the minimum duration_ms per host.",
         hint: "summarize fastest = min(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -454,10 +452,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Maximum latency",
+        title: "Find Maximum Value",
         narration:
-          "`max()` exposes the worst-case latency per host — the spikes a reliability team must explain.",
-        lesson: "fetch logs\n| summarize slowest = max(duration_ms), by: {host}",
+          "`max()` returns the largest value in each group — the worst case, the ceiling, the outlier that defines your tail latency. While the average and minimum paint a rosier picture, `max(duration_ms)` exposes the spikes that real users actually experience during a bad moment. At DataForge, reliability teams use it to understand which hosts are capable of producing catastrophically slow queries, and whether those spikes are getting worse over time.",
+        lesson: "Find Maximum Value",
         goal: "Find the maximum duration_ms per host.",
         hint: "summarize slowest = max(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -480,10 +478,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "One row per host",
+        title: "One Row per Unique Value",
         narration:
-          "`dedup` keeps the first record for each distinct value of a field — here, one representative line per auth host.",
-        lesson: "fetch logs\n| dedup host",
+          "`dedup` keeps only the first record for each distinct value of the specified field, discarding subsequent duplicates. It is the simplest way to produce a unique list from a dataset that contains many repetitions. SecureBank's auth logs record every login attempt — hundreds of lines per host. When you need to know *which hosts exist* rather than how many events each had, `dedup host` reduces the full log stream to a clean roster in a single command.",
+        lesson: "One Row per Unique Value",
         goal: "Keep only the first record per distinct host.",
         hint: "dedup host",
         sampleData: generateAuthLogs(300, 1),
@@ -496,8 +494,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Dedup after filtering",
         narration:
-          "Order matters: filter to errors first, then `dedup host` to list exactly which hosts experienced a failed login.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| dedup host',
+          "Pipeline order determines what `dedup` operates on. By filtering to ERROR records first and *then* deduplicating on `host`, you produce exactly the list of hosts that experienced at least one failure — not just any host that appeared in the logs. At SecureBank this distinction matters: the security team wants to know which hosts were actually affected by failed logins, not merely which hosts exist in the system.",
+        lesson: "Deduplicate After Filtering",
         goal: "List each host that had at least one ERROR, once.",
         hint: 'filter loglevel == "ERROR" then dedup host',
         sampleData: generateAuthLogs(300, 1),
@@ -525,10 +523,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Count by level and host",
+        title: "Group by Multiple Fields",
         narration:
-          "Listing two `by` fields produces one row per (loglevel, host) combination — the matrix behind a heatmap.",
-        lesson: "fetch logs\n| summarize n = count(), by: {loglevel, host}",
+          "The `by` clause of `summarize` accepts a comma-separated list of fields, creating one output row for every unique combination of those values. Two grouping fields produce a cross-tabulation — the same data that powers a heatmap. For CloudScale's application logs, grouping by both `loglevel` and `host` answers the question: 'how many errors did each specific host produce, broken down by severity?' A single-field group can't answer that.",
+        lesson: "Group by Multiple Fields",
         goal: "Count records grouped by both loglevel and host.",
         hint: "summarize n = count(), by: {loglevel, host}",
         sampleData: generateAppLogs(300, 1),
@@ -541,8 +539,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Focus on errors per host",
         narration:
-          "Filter to ERROR first, then group by host — a tighter view of which hosts are failing and how often.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}',
+          "Filtering before aggregating reduces the group space to only the dimension you care about. By keeping only ERROR records first, the subsequent `summarize ... by: {host}` produces a tight, focused view: one row per host, showing exactly how many failures that host contributed. At CloudScale this is often the starting point for incident triage — rank the resulting table by `errors desc` to immediately see which host is the biggest problem.",
+        lesson: "Filter Then Aggregate",
         goal: "Count ERROR records per host.",
         hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host}',
         sampleData: generateAppLogs(300, 1),
@@ -566,11 +564,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Count and average together",
+        title: "Multiple Aggregations Together",
         narration:
-          "A single `summarize` can carry several aggregations. Get both the query volume and the mean latency per host in one pass.",
-        lesson:
-          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), by: {host}",
+          "A single `summarize` command can compute multiple aggregations at once, separated by commas. Each gets its own alias and its own aggregation function. This is more efficient than running the same pipeline twice with different aggregations, and it keeps the result in one table so you can sort and compare the columns together. For DataForge's database logs, combining `count()` and `avg(duration_ms)` per host tells you both the volume of queries *and* their typical speed in one pass.",
+        lesson: "Multiple Aggregations Together",
         goal: "Per host, compute both the record count and the average duration_ms.",
         hint: "summarize n = count(), avg_ms = avg(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -594,9 +591,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Add the worst case",
         narration:
-          "Extend the same summarize with a `max()` to capture the slowest query alongside the count and average.",
-        lesson:
-          "fetch logs\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
+          "You can keep extending a `summarize` with additional aggregations as the report demands. Adding `max(duration_ms)` alongside count and average gives a three-column profile: how often, how fast on average, and how bad at worst. Together these three numbers tell a much more complete story than any one of them alone — DataForge's reliability team uses this exact pattern to decide whether a host's worst-case latency is an acceptable outlier or a sign of a deeper problem.",
+        lesson: "Add More Aggregation Columns",
         goal: "Per host, compute count, average, and max of duration_ms.",
         hint: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -631,10 +627,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Median latency",
+        title: "Compute Median Latency",
         narration:
-          "The median is the middle value — far more robust to spikes than the mean. Compute it per database host.",
-        lesson: "fetch logs\n| summarize p50 = median(duration_ms), by: {host}",
+          "The median is the middle value when all records are sorted — 50% of queries are faster, 50% are slower. Unlike the mean, the median is not pulled upward by a handful of very slow queries, making it a much more honest representation of the typical experience. For DataForge's database hosts, `median(duration_ms)` per host gives you the true midpoint of the latency distribution, which is often significantly lower than the average in skewed workloads.",
+        lesson: "Compute Median Latency",
         goal: "Compute the median duration_ms per host.",
         hint: "summarize p50 = median(duration_ms), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -645,10 +641,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "95th percentile",
+        title: "Measure Tail Latency",
         narration:
-          "`percentile()` describes the tail. The p95 latency is the value 95% of queries stay under — a classic SLO metric.",
-        lesson: "fetch logs\n| summarize p95 = percentile(duration_ms, 95), by: {host}",
+          "`percentile(field, N)` returns the value below which N percent of records fall. The 95th percentile (p95) is the standard SLO metric for tail latency: 95% of requests complete faster than this number, and the remaining 5% are the slow tail. At DataForge, tracking `p95` per host is far more useful for SLO compliance than tracking the mean, because SLOs are about the worst experiences real users have — not the average one.",
+        lesson: "Measure Tail Latency",
         goal: "Compute the 95th-percentile duration_ms per host.",
         hint: "summarize p95 = percentile(duration_ms, 95), by: {host}",
         sampleData: generateDbLogs(300, 1),
@@ -671,10 +667,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Records per 15 minutes",
+        title: "Build a Time Series",
         narration:
-          "`makeTimeseries count()` groups records into fixed time buckets, yielding one point per interval for a line chart.",
-        lesson: "fetch logs\n| makeTimeseries count(), interval: 15m",
+          "`makeTimeseries` is DQL's dedicated time-bucketing command. It divides the queried time range into equal intervals and computes an aggregation within each bucket, producing one output row per time slot. The `interval` parameter controls bucket width — `15m` gives 15-minute granularity. At CloudScale, converting a flat stream of log records into a time series is what makes trends, spikes, and dips visible. Without it, you are just looking at a pile of records.",
+        lesson: "Build a Time Series",
         goal: "Produce a 15-minute count timeseries of all log records.",
         hint: "makeTimeseries count(), interval: 15m",
         sampleData: generateAppLogs(400, 1),
@@ -687,8 +683,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Errors over time",
         narration:
-          "Filter to ERROR first, then bucket — the shape of an incident as it unfolds.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries count(), interval: 15m',
+          "Filtering before `makeTimeseries` restricts the time series to only the events you care about. The resulting chart shows the shape of an incident: when error rates spiked, how high they went, and whether they recovered. At CloudScale, the combination of `filter loglevel == \"ERROR\"` followed by `makeTimeseries count(), interval: 15m` is the canonical first chart in any incident post-mortem — it establishes the timeline of the event.",
+        lesson: "Time Series of Filtered Records",
         goal: "Produce a 15-minute count timeseries of ERROR records only.",
         hint: 'filter loglevel == "ERROR" then makeTimeseries count(), interval: 15m',
         sampleData: generateAppLogs(400, 1),
@@ -716,11 +712,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Flag the errors",
+        title: "Add a Conditional Column",
         narration:
-          "`if(cond, a, b)` returns `a` when the condition holds, otherwise `b`. Tag each record as critical or normal.",
-        lesson:
-          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
+          "The `if(condition, valueIfTrue, valueIfFalse)` function evaluates a condition per record and returns one of two values. Combined with `fieldsAdd`, it lets you categorize records at the row level rather than filtering them out. At CloudScale, tagging each log record as `\"critical\"` or `\"normal\"` based on its `loglevel` makes downstream grouping and charting simpler — instead of reasoning about four log levels, consumers of the data work with a binary signal.",
+        lesson: "Add a Conditional Column",
         goal: 'Add severity_flag = "critical" for ERROR records, else "normal".',
         hint: 'fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")',
         sampleData: generateAppLogs(300, 1),
@@ -738,9 +733,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Summarize by the derived flag",
         narration:
-          "Derived columns behave like any other — group by `severity_flag` to count critical vs. normal traffic.",
-        lesson:
-          'fetch logs\n| fieldsAdd severity_flag = if(loglevel == "ERROR", "critical", "normal")\n| summarize n = count(), by: {severity_flag}',
+          "A column created by `fieldsAdd` behaves exactly like any native field in subsequent pipeline stages. You can filter on it, sort by it, rename it, or — as here — group by it in a `summarize`. Adding `severity_flag` with `if()` and then counting by that flag gives you a crisp critical-vs-normal breakdown of CloudScale's log volume. This two-step pattern (derive a category, then aggregate by it) is one of the most powerful shapes in DQL.",
+        lesson: "Aggregate by Derived Column",
         goal: "Count records grouped by the derived severity_flag.",
         hint: "fieldsAdd severity_flag = ... then summarize n = count(), by: {severity_flag}",
         sampleData: generateAppLogs(300, 1),
@@ -769,10 +763,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Find records missing a status",
+        title: "Detect Missing Fields",
         narration:
-          "Not every event carries a `status`. `isNull(status)` keeps exactly the records where it is absent.",
-        lesson: "fetch bizevents\n| filter isNull(status)",
+          "In Grail, optional fields simply don't exist on records that didn't emit them — they are null. `isNull(field)` tests for that absence and returns true when the field is missing or empty. This is how you find the records that were never enriched with a particular attribute. In CloudScale's business events, not every event carries a `status` field — only certain event types do. Filtering with `isNull(status)` isolates exactly the sparse records so you can investigate or backfill them.",
+        lesson: "Detect Missing Fields",
         goal: "Keep only events that have no status field.",
         hint: "filter isNull(status)",
         sampleData: generateBizEvents(300, 1),
@@ -783,11 +777,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Default the missing status",
+        title: "Supply a Default Value",
         narration:
-          "`coalesce(a, b)` returns the first non-empty value. Backfill a readable default so every row has a status.",
-        lesson:
-          'fetch bizevents\n| fieldsAdd status_clean = coalesce(status, "unknown")',
+          "`coalesce(a, b)` returns the first non-null value from its argument list. When `a` is present it is returned as-is; when `a` is null, the fallback `b` is used instead. This is the standard way to guarantee that every record has a value for a field before you group or chart by it — null values can cause unexpected gaps in charts or summarize results. Here, backfilling `status` with `\"unknown\"` on CloudScale's business events ensures downstream aggregations are gap-free.",
+        lesson: "Supply a Default Value",
         goal: 'Add status_clean = status, or "unknown" when status is missing.',
         hint: 'fieldsAdd status_clean = coalesce(status, "unknown")',
         sampleData: generateBizEvents(300, 1),
@@ -815,11 +808,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Round seconds",
+        title: "Round to Whole Numbers",
         narration:
-          "Convert milliseconds to seconds and `round()` the result so the report shows whole numbers.",
-        lesson:
-          "fetch logs\n| fieldsAdd duration_s = round(duration_ms / 1000)",
+          "`round(expression)` rounds a numeric value to the nearest integer. It is useful whenever a derived metric produces fractional values that are too precise for a human-facing report. At DataForge, converting `duration_ms` to seconds by dividing by 1000 gives decimal results like `1.347`; wrapping the expression in `round()` produces clean whole numbers like `1` that are easier to read in a dashboard or export.",
+        lesson: "Round to Whole Numbers",
         goal: "Add duration_s = round(duration_ms / 1000).",
         hint: "fieldsAdd duration_s = round(duration_ms / 1000)",
         sampleData: generateDbLogs(300, 1),
@@ -830,11 +822,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Absolute deviation from a baseline",
+        title: "Compute Absolute Deviation",
         narration:
-          "`abs()` strips the sign, turning a signed deviation into a magnitude. Measure how far each query is from a 500ms baseline.",
-        lesson:
-          "fetch logs\n| fieldsAdd deviation = abs(duration_ms - 500)",
+          "`abs()` returns the absolute value of a number, stripping the sign so negative and positive deviations are treated as equal magnitudes. This is useful for measuring how far a value is from a reference point without caring about direction. At DataForge, `abs(duration_ms - 500)` computes each query's deviation from the 500ms service-level baseline — a query that took 200ms has a deviation of 300, and one that somehow recorded 800ms also has a deviation of 300, making them equally anomalous.",
+        lesson: "Compute Absolute Deviation",
         goal: "Add deviation = abs(duration_ms - 500).",
         hint: "fieldsAdd deviation = abs(duration_ms - 500)",
         sampleData: generateDbLogs(300, 1),
@@ -861,10 +852,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "contains()",
+        title: "Match a Substring in a Field",
         narration:
-          "`contains(field, term)` is a precise substring test on one column. Find every record that mentions a memory problem.",
-        lesson: 'fetch logs\n| filter contains(content, "memory")',
+          "`contains(field, term)` tests whether a specific field's value includes the given substring, returning true or false per record. Unlike `search`, which scans every field, `contains()` targets a single column — making it both more precise and more efficient. At CloudScale, `contains(content, \"memory\")` finds every application log entry whose message body mentions a memory issue, without accidentally matching hosts or log levels that happen to contain the same characters.",
+        lesson: "Match a Substring in a Field",
         goal: "Keep records whose content contains the word 'memory'.",
         hint: 'filter contains(content, "memory")',
         sampleData: generateAppLogs(300, 1),
@@ -875,10 +866,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "startsWith()",
+        title: "Match the Start of a String",
         narration:
-          "`startsWith()` anchors the match to the beginning of the value. Use it on loglevel to keep only the records whose severity begins with 'ERR'.",
-        lesson: 'fetch logs\n| filter startsWith(loglevel, "ERR")',
+          "`startsWith(field, prefix)` returns true only when the field's value begins with the given string. It is an anchored match — unlike `contains()`, it won't match the prefix in the middle of a value. This is useful for matching codes, namespaces, or severity levels by prefix when the exact full value might vary. At CloudScale, `startsWith(loglevel, \"ERR\")` would catch both `\"ERROR\"` and `\"ERRCRIT\"` if such levels existed, making it slightly more flexible than an equality check.",
+        lesson: "Match the Start of a String",
         goal: "Keep records whose loglevel begins with 'ERR'.",
         hint: 'filter startsWith(loglevel, "ERR")',
         sampleData: generateAppLogs(300, 1),
@@ -901,10 +892,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "endsWith()",
+        title: "Match the End of a String",
         narration:
-          "Failed-login messages end with `attempts=5`. `endsWith()` anchors the match to the tail of the value.",
-        lesson: 'fetch logs\n| filter endsWith(content, "attempts=5")',
+          "`endsWith(field, suffix)` anchors the match to the tail of a string — it returns true only when the field value ends with the given text. This is the complement to `startsWith()` and is useful for matching file extensions, status codes, or structured log suffixes. SecureBank's failed-login messages follow a consistent format that ends with `\"attempts=5\"` when the maximum retry count is reached. Using `endsWith()` pins the match to that exact termination pattern, preventing false positives from messages that merely mention the word 'attempts' elsewhere.",
+        lesson: "Match the End of a String",
         goal: "Keep records whose content ends with 'attempts=5'.",
         hint: 'filter endsWith(content, "attempts=5")',
         sampleData: generateAuthLogs(300, 1),
@@ -915,10 +906,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "like() wildcards",
+        title: "Match with Wildcards",
         narration:
-          "`like()` uses `%` as a wildcard, like SQL. Match any message that contains an admin login attempt regardless of surrounding text.",
-        lesson: 'fetch logs\n| filter like(content, "%user=admin%")',
+          "`like(field, pattern)` matches strings using SQL-style wildcards: `%` matches any sequence of characters, and `_` matches exactly one. It is more expressive than `contains()` or `startsWith()` when the target text can appear at a variable position within a longer value. At SecureBank, `like(content, \"%user=admin%\")` matches any authentication log entry that mentions the admin user anywhere in the message, regardless of what precedes or follows it.",
+        lesson: "Match with Wildcards",
         goal: "Keep records whose content matches the pattern %user=admin%.",
         hint: 'filter like(content, "%user=admin%")',
         sampleData: generateAuthLogs(300, 1),
@@ -941,11 +932,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Normalize case",
+        title: "Normalize String Case",
         narration:
-          "`lower()` and `upper()` normalize text so comparisons and grouping are consistent regardless of original casing.",
-        lesson:
-          "fetch logs\n| fieldsAdd level_lc = lower(loglevel), host_uc = upper(host)",
+          "`lower()` converts every character in a string to lowercase; `upper()` does the reverse. Case normalization is important before grouping or comparing text values that may have been emitted with inconsistent casing — `\"ERROR\"` and `\"error\"` would otherwise form separate groups. At SecureBank, normalizing `loglevel` to lowercase and `host` to uppercase before a join or summarize ensures consistent output regardless of how different services formatted their fields.",
+        lesson: "Normalize String Case",
         goal: "Add a lowercased loglevel and an uppercased host.",
         hint: "fieldsAdd level_lc = lower(loglevel), host_uc = upper(host)",
         sampleData: generateAuthLogs(300, 1),
@@ -961,11 +951,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Build a label",
+        title: "Concatenate Strings Together",
         narration:
-          "`concat()` joins values into one string. Build a compact `host@level` label for chart axes.",
-        lesson:
-          'fetch logs\n| fieldsAdd label = concat(host, "@", loglevel)',
+          "`concat()` joins two or more strings into a single value. You can mix field references and string literals in any order. This is useful for building composite keys, display labels, or identifiers that combine multiple dimensions. At SecureBank, building a `host@loglevel` label with `concat(host, \"@\", loglevel)` creates a compact string that uniquely identifies a (host, severity) pair — ready to use as a chart axis label or a grouping key in a follow-up query.",
+        lesson: "Concatenate Strings Together",
         goal: 'Add label = host + "@" + loglevel.',
         hint: 'fieldsAdd label = concat(host, "@", loglevel)',
         sampleData: generateAuthLogs(300, 1),
@@ -988,11 +977,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "substring()",
+        title: "Extract a String Slice",
         narration:
-          "`substring(field, start, len)` extracts a fixed slice — useful for pulling a code or prefix out of a longer value.",
-        lesson:
-          "fetch logs\n| fieldsAdd prefix = substring(content, 0, 5)",
+          "`substring(field, start, length)` extracts a portion of a string starting at the given zero-based offset and running for the given number of characters. It is the right tool when you know the structure of a field and need to pull a fixed-position code or prefix out of it. At SecureBank, log content often begins with a 5-character event code that categorizes the action — extracting it with `substring(content, 0, 5)` makes it available for grouping without parsing the full message.",
+        lesson: "Extract a String Slice",
         goal: "Add prefix = the first 5 characters of content.",
         hint: "fieldsAdd prefix = substring(content, 0, 5)",
         sampleData: generateAuthLogs(300, 1),
@@ -1003,11 +991,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "replaceString()",
+        title: "Replace Text in a String",
         narration:
-          "`replaceString(field, find, replace)` rewrites every occurrence of a token — handy for redaction or normalization.",
-        lesson:
-          'fetch logs\n| fieldsAdd scrubbed = replaceString(content, "attacker_ip=", "ip=")',
+          "`replaceString(field, find, replace)` substitutes every occurrence of `find` with `replace` in the field's value. This is useful for redacting sensitive tokens, normalizing legacy field formats, or making labels consistent before a report. At SecureBank, replacing `\"attacker_ip=\"` with the shorter `\"ip=\"` in log content normalizes an inconsistent naming convention left over from an older logging library, without having to modify the source systems.",
+        lesson: "Replace Text in a String",
         goal: 'Add scrubbed = content with "attacker_ip=" replaced by "ip=".',
         hint: 'fieldsAdd scrubbed = replaceString(content, "attacker_ip=", "ip=")',
         sampleData: generateAuthLogs(300, 1),
@@ -1039,10 +1026,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Only enriched events",
+        title: "Filter for Present Fields",
         narration:
-          "`isNotNull(field)` keeps records where the optional field is populated — here, events that carry a deployment `status`.",
-        lesson: "fetch events\n| filter isNotNull(status)",
+          "`isNotNull(field)` returns true when the field exists and has a value, and false when it is absent or null. Use it inside a `filter` to keep only the records that have been enriched with a particular optional attribute. At Acme Corp, deployment events are emitted by multiple services but only some of them include a `status` field indicating whether the deployment succeeded. `isNotNull(status)` restricts the pipeline to exactly those enriched records, which are the ones useful for outcome analysis.",
+        lesson: "Filter for Present Fields",
         goal: "Keep only events that have a status field.",
         hint: "filter isNotNull(status)",
         sampleData: generateEventsWithTags(300, 1),
@@ -1053,10 +1040,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Only sparse events",
+        title: "Filter for Absent Fields",
         narration:
-          "Flip to `isNull()` to inspect the records that are *missing* the attribute — often the ones that need attention.",
-        lesson: "fetch events\n| filter isNull(status)",
+          "`isNull(field)` is the inverse — it keeps records where the field is missing. These are often the events that fell through the cracks: services that emitted partial data, events that were cut short, or records from older schema versions that predate the field's introduction. At Acme Corp, finding the events that lack a `status` is the first step in understanding which services haven't been updated to emit full deployment metadata.",
+        lesson: "Filter for Absent Fields",
         goal: "Keep only events that have no status field.",
         hint: "filter isNull(status)",
         sampleData: generateEventsWithTags(300, 1),
@@ -1079,11 +1066,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Default missing status",
+        title: "Backfill a Default Value",
         narration:
-          '`coalesce(status, "none")` substitutes a placeholder wherever `status` is absent, so downstream grouping is clean.',
-        lesson:
-          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")',
+          "When a field is sometimes absent, grouping by it can produce a null bucket in your results — which many charting tools treat as an error or simply drop. `coalesce(field, default)` eliminates null values before they reach an aggregation step by substituting a readable placeholder. At Acme Corp, replacing a missing `status` with `\"none\"` before summarizing ensures the grouping produces a complete, gap-free breakdown that includes the unenriched events rather than silently discarding them.",
+        lesson: "Backfill a Default Value",
         goal: 'Add status_clean = status, or "none" when missing.',
         hint: 'fieldsAdd status_clean = coalesce(status, "none")',
         sampleData: generateEventsWithTags(300, 1),
@@ -1094,11 +1080,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Group on the cleaned field",
+        title: "Group on a Cleaned Field",
         narration:
-          "Now every record has a `status_clean`, so a `summarize ... by status_clean` produces a complete, gap-free breakdown.",
-        lesson:
-          'fetch events\n| fieldsAdd status_clean = coalesce(status, "none")\n| summarize n = count(), by: {status_clean}',
+          "Once every record has a non-null value for `status_clean`, a `summarize ... by: {status_clean}` will produce a row for every category — including the `\"none\"` placeholder for unenriched events. Without the `coalesce()` step first, the null records would either form an unlabeled null bucket or be dropped entirely depending on the engine's behavior. At Acme Corp, this complete breakdown is what the platform team uses to track which event types still need status enrichment.",
+        lesson: "Group on a Cleaned Field",
         goal: "Count events grouped by the backfilled status_clean.",
         hint: 'fieldsAdd status_clean = coalesce(status, "none") then summarize n = count(), by: {status_clean}',
         sampleData: generateEventsWithTags(300, 1),
@@ -1126,11 +1111,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Errors per 15 minutes",
+        title: "Chart Errors Over Time",
         narration:
-          "Filter to ERROR, then `makeTimeseries count()` at a 15m interval — the canonical 'is something on fire?' chart.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 15m',
+          "The combination of `filter loglevel == \"ERROR\"` and `makeTimeseries count(), interval: 15m` is the canonical DQL pattern for incident detection. The filter restricts the data to failures only; `makeTimeseries` then shows you how those failures distribute across time in 15-minute buckets. At CloudScale, this chart is the first thing an on-call engineer opens after receiving a page — the shape of the curve tells you whether the incident is a spike, a gradual ramp, or a sustained flat elevation.",
+        lesson: "Chart Errors Over Time",
         goal: "Produce a 15-minute count timeseries of ERROR records.",
         hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 15m',
         sampleData: generateAppLogs(400, 1),
@@ -1142,11 +1126,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Coarser hourly view",
+        title: "Widen the Time Interval",
         narration:
-          "Widen the interval to 1h for an executive-level trend — fewer points, smoother shape.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 1h',
+          "Changing `interval: 15m` to `interval: 1h` reduces the number of data points by four times, smoothing out minute-to-minute noise to reveal the broader shape of a trend. Finer intervals are better for live incident response; coarser intervals are better for capacity planning and executive reporting. At CloudScale, a 1-hour bucketed error trend in a weekly review is much more readable than a 15-minute one — the signal is clearer when you are asking a strategic question rather than a tactical one.",
+        lesson: "Adjust Time Bucket Size",
         goal: "Produce a 1-hour count timeseries of ERROR records.",
         hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 1h',
         sampleData: generateAppLogs(400, 1),
@@ -1170,10 +1153,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Spans per service over time",
+        title: "Split Time Series by Dimension",
         narration:
-          "Adding `by: {service.name}` yields one series per service — a multi-line chart instead of a single line.",
-        lesson: "fetch spans\n| makeTimeseries n = count(), by: {service.name}, interval: 15m",
+          "Adding a `by` clause to `makeTimeseries` produces one time series per distinct value of the grouping field — a multi-line chart rather than a single aggregated line. This is the key technique for attributing a trend to a specific dimension. At Acme Corp, splitting span counts by `service.name` immediately shows which microservice is generating the most traffic over time, and whether a load spike is system-wide or isolated to one service.",
+        lesson: "Split Time Series by Dimension",
         goal: "Produce a 15-minute count timeseries split by service.name.",
         hint: "makeTimeseries n = count(), by: {service.name}, interval: 15m",
         sampleData: generateSpans(400, 1),
@@ -1184,11 +1167,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Errored spans per service",
+        title: "Filter Before Splitting by Service",
         narration:
-          "Filter to failing spans first, then split by service to see which service owns the failures.",
-        lesson:
-          'fetch spans\n| filter status.code == "ERROR"\n| makeTimeseries n = count(), by: {service.name}, interval: 15m',
+          "Combining a `filter` with a split-by `makeTimeseries` gives you a per-service failure trend — the multi-line chart that reveals which specific service is responsible for the errors in a microservice architecture. At Acme Corp, filtering spans to `status.code == \"ERROR\"` and then splitting by `service.name` transforms a confusing blended error count into separate lines per service, making it immediately obvious whether one service is failing in isolation or whether the errors are correlated across the fleet.",
+        lesson: "Per-Service Error Trend",
         goal: "Timeseries of ERROR spans, split by service.name, 15m buckets.",
         hint: 'filter status.code == "ERROR" then makeTimeseries n = count(), by: {service.name}, interval: 15m',
         sampleData: generateSpans(400, 1),
@@ -1216,11 +1198,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Errors per host",
+        title: "Aggregate After Filtering",
         narration:
-          "Start by isolating failures and counting them per host — the raw material for a ranking.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}',
+          "The filter-then-summarize pattern is the workhorse of DQL analysis: narrow the dataset to the events you care about, then count or measure them by a dimension. Filtering to ERROR first means the summarize only processes failures — the count per host reflects actual incident frequency rather than total activity. At SecureBank, this gives the SOC a per-host failure count from the authentication logs that can feed directly into a risk-scoring system.",
+        lesson: "Aggregate After Filtering",
         goal: "Count ERROR records per host.",
         hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host}',
         sampleData: generateAuthLogs(400, 1),
@@ -1232,11 +1213,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Rank the worst hosts",
+        title: "Sort Aggregated Results",
         narration:
-          "Sort the aggregated result descending so the host with the most failed logins lands on top.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}\n| sort errors desc',
+          "After `summarize` produces a per-group table, `sort` ranks that table by any of its columns. Sorting the per-host error count descending puts the worst offender at position one — exactly where the on-call engineer's eyes land first. This three-stage shape (filter → summarize → sort) is the foundation of every 'top N problems' query in DQL, and at SecureBank it turns raw auth logs into an actionable priority list in seconds.",
+        lesson: "Sort Aggregated Results",
         goal: "Produce the per-host error counts ordered worst-first.",
         hint: "...summarize errors = count(), by: {host then sort errors desc}",
         sampleData: generateAuthLogs(400, 1),
@@ -1261,10 +1241,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Remove debug noise",
+        title: "Remove Noise Before Analysis",
         narration:
-          "`filterOut` the DEBUG diagnostics so the rest of the pipeline only sees meaningful traffic.",
-        lesson: 'fetch logs\n| filterOut loglevel == "DEBUG"',
+          "In a real incident, DEBUG logs are almost always irrelevant — they represent instrumentation traffic, not failures. Removing them at the top of the pipeline with `filterOut` means every subsequent command operates on a cleaner, smaller dataset. At CloudScale, this matters both for performance and for accuracy: downstream counts and summaries won't be inflated by the constant stream of DEBUG chatter that services emit during normal operation.",
+        lesson: "Remove Noise Before Analysis",
         goal: "Drop DEBUG records.",
         hint: 'filterOut loglevel == "DEBUG"',
         sampleData: generateAppLogs(400, 1),
@@ -1275,11 +1255,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Label, then count by label",
+        title: "Enrich Then Summarize",
         narration:
-          "Add an `is_error` flag with `if()`, then summarize by it — error vs. non-error volume after noise removal.",
-        lesson:
-          'fetch logs\n| filterOut loglevel == "DEBUG"\n| fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no")\n| summarize n = count(), by: {is_error}',
+          "After removing the noise, the pipeline enriches each remaining record with a derived `is_error` flag using `if()`, then groups by that flag. This shape — denoise, label, summarize — produces a crisp binary breakdown of meaningful traffic at CloudScale: how much is errors versus non-errors, after the diagnostic noise has been stripped. The three-stage pipeline is more powerful than a single filter because the intermediate label can be reused in multiple downstream steps.",
+        lesson: "Enrich Then Summarize",
         goal: "After dropping DEBUG, count records grouped by an is_error flag.",
         hint: 'filterOut DEBUG, fieldsAdd is_error = if(loglevel == "ERROR", "yes", "no"), summarize n = count(), by: {is_error}',
         sampleData: generateAppLogs(400, 1),
@@ -1309,11 +1288,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Find the candidates",
+        title: "Search Then Project Columns",
         narration:
-          "Search broadly for anything mentioning latency, then project to the columns a responder needs.",
-        lesson:
-          'fetch logs\n| search "duration_ms"\n| fields timestamp, loglevel, host, content',
+          "Combining `search` with `fields` is the standard DQL triage opener: cast a wide net, then immediately narrow the result to the columns an engineer needs to act on. `search \"duration_ms\"` finds every CloudScale log record that mentions latency data anywhere in its fields. The subsequent `fields timestamp, loglevel, host, content` removes the clutter so the responder sees only the four columns that matter for the investigation, without scrolling past irrelevant metadata.",
+        lesson: "Search Then Project Columns",
         goal: "Search for 'duration_ms' and keep only four columns.",
         hint: 'search "duration_ms" then fields timestamp, loglevel, host, content',
         sampleData: generateAppLogs(400, 1),
@@ -1325,11 +1303,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Newest ten",
+        title: "Rank and Trim Results",
         narration:
-          "Sort by timestamp descending and `limit 10` to surface the ten most recent matching events.",
-        lesson:
-          'fetch logs\n| search "duration_ms"\n| fields timestamp, loglevel, host, content\n| sort timestamp desc\n| limit 10',
+          "Sorting by `timestamp desc` and then `limit 10` closes the retrieval pipeline: after finding and shaping the records, you surface the ten most recent ones — the events most likely to be relevant to an ongoing incident. This four-command shape (search → fields → sort → limit) is the complete fetch-and-present pattern in DQL. At CloudScale it takes a potentially large set of latency-related log lines and reduces them to a concise, time-ordered list ready for copy-paste into an incident ticket.",
+        lesson: "Rank and Trim Results",
         goal: "From the projected matches, return the 10 newest by timestamp.",
         hint: "...fields ... then sort timestamp desc then limit 10",
         sampleData: generateAppLogs(400, 1),
@@ -1355,11 +1332,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Slow non-debug queries",
+        title: "Filter on Multiple Conditions",
         narration:
-          "Compound `and` conditions narrow the dataset to slow (>1000ms) queries that are not DEBUG noise.",
-        lesson:
-          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"',
+          "Compound `and` conditions let you express precise multi-dimensional criteria in a single filter step. At DataForge, a slow database query is only worth investigating if it isn't a DEBUG diagnostic — DEBUG records often reflect intentional slow operations under test. Requiring `duration_ms > 1000 and loglevel != \"DEBUG\"` ensures the pipeline only surfaces genuinely slow production queries. Combining numeric and string conditions in one filter keeps the query readable and avoids a second pipeline stage.",
+        lesson: "Filter on Multiple Conditions",
         goal: "Keep records where duration_ms > 1000 and loglevel != DEBUG.",
         hint: 'filter duration_ms > 1000 and loglevel != "DEBUG"',
         sampleData: generateDbLogs(400, 1),
@@ -1375,11 +1351,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Profile and rank hosts",
+        title: "Multi-Aggregation with Ranking",
         narration:
-          "Aggregate count, average, and max per host, then sort by the worst-case latency to rank the problem hosts.",
-        lesson:
-          'fetch logs\n| filter duration_ms > 1000 and loglevel != "DEBUG"\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}\n| sort max_ms desc',
+          "A full performance profile combines count (how often), average (typical cost), and max (worst case) in a single `summarize`, then ranks the result by the metric that matters most for the investigation. At DataForge, sorting by `max_ms desc` surfaces the host whose single worst query was the most damaging — the host most likely to have caused a user-visible timeout. This four-stage pipeline (fetch → filter → summarize → sort) is the complete shape of an advanced DQL performance query.",
+        lesson: "Multi-Aggregation with Ranking",
         goal: "Per host, compute count/avg/max of duration_ms for slow non-debug queries, ranked by max_ms.",
         hint: "...summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: {host then sort max_ms desc}",
         sampleData: generateDbLogs(400, 1),
@@ -1427,8 +1402,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Isolate the failed logins",
         narration:
-          "Every failed authentication is logged at ERROR level. Strip everything else to focus the investigation.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+          "Every failed authentication attempt at SecureBank is recorded with `loglevel` set to `\"ERROR\"`. Starting an investigation by filtering to just those records focuses the entire subsequent pipeline on failures only — there is no point examining successful logins when hunting an intrusion. This single filter step reduces the dataset from all authentication activity to just the anomalous events, establishing the investigative scope before any deeper analysis begins.",
+        lesson: "Filter by Log Level",
         goal: "Keep only ERROR-level authentication records.",
         hint: 'filter loglevel == "ERROR"',
         sampleData: generateAuthLogs(500, 1),
@@ -1441,9 +1416,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Confirm the admin was the target",
         narration:
-          "The attacker hammered the privileged `admin` account. Narrow to failures whose message names that user.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")',
+          "Not all failed logins are an attack — users forget passwords constantly. To confirm this was a targeted intrusion, you need to show that the failures concentrated on the privileged `admin` account. Adding a second `filter contains(content, \"user=admin\")` narrows the ERROR records further to only those whose message body names that specific account. Two chained filters are cleaner than a single compound condition when each filter represents a distinct investigative step.",
+        lesson: "Chain Filters for Precision",
         goal: "Keep ERROR records whose content mentions user=admin.",
         hint: 'filter loglevel == "ERROR" then filter contains(content, "user=admin")',
         sampleData: generateAuthLogs(500, 1),
@@ -1457,9 +1431,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Rank the hosts under attack",
         narration:
-          "Count the admin-targeted failures per host and sort descending — the top row is where the attacker concentrated.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| filter contains(content, "user=admin")\n| summarize hits = count(), by: {host}\n| sort hits desc',
+          "With the attack population confirmed, the final step is to quantify the blast radius: how many admin-targeted failures occurred per host, and which host bore the brunt of the attack? `summarize hits = count(), by: {host}` produces the per-host count, and `sort hits desc` ranks them with the most-attacked host at the top. This is the actionable output SecureBank's incident responders need — a prioritized list of which systems to lock down first.",
+        lesson: "Rank Hosts by Failure Count",
         goal: "Per host, count admin-targeted ERROR logins, ranked worst-first.",
         hint: '...filter contains(content, "user=admin") then summarize hits = count(), by: {host then sort hits desc}',
         sampleData: generateAuthLogs(500, 1),
@@ -1485,10 +1458,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Collect the errors",
+        title: "Isolate the Error Population",
         narration:
-          "Filter the application logs down to ERROR — the population the storm is made of.",
-        lesson: 'fetch logs\n| filter loglevel == "ERROR"',
+          "When a pager fires, the first move is always to establish the population of affected events. Filtering CloudScale's application logs to `loglevel == \"ERROR\"` extracts exactly the records that constitute the storm — everything else is background noise for this investigation. This single filtered dataset is the source of truth for both the host-ranking analysis and the timeline chart in the next steps. Getting this filter right at the start ensures consistency across all subsequent queries.",
+        lesson: "Isolate the Error Population",
         goal: "Keep only ERROR-level application records.",
         hint: 'filter loglevel == "ERROR"',
         sampleData: generateAppLogs(500, 1),
@@ -1501,9 +1474,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Find the epicenter host",
         narration:
-          "Count errors per host and rank — the host at the top is where the on-call should look first.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| summarize errors = count(), by: {host}\n| sort errors desc',
+          "Counting errors per host and sorting descending answers 'where should we look first?' in an incident. The host with the highest error count is the epicenter — the machine most likely causing or experiencing the storm. At CloudScale, this query runs in the first minutes of an incident to give the on-call engineer a starting point. It transforms a fleet-wide alarm into a specific host name and a specific number to communicate in the incident channel.",
+        lesson: "Rank Hosts by Error Count",
         goal: "Per host, count ERROR records, ranked worst-first.",
         hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host then sort errors desc}',
         sampleData: generateAppLogs(500, 1),
@@ -1518,9 +1490,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Chart the storm",
         narration:
-          "Bucket the errors into 15-minute intervals to see when the storm started and whether it is still growing.",
-        lesson:
-          'fetch logs\n| filter loglevel == "ERROR"\n| makeTimeseries errors = count(), interval: 15m',
+          "Knowing which host has the most errors tells you *where*; a time series tells you *when* and *how fast*. Bucketing the ERROR records into 15-minute intervals reveals the storm's timeline: when the spike began, whether it is still growing or already subsiding, and whether it correlates with a deployment or a traffic event. At CloudScale this chart is essential for the post-mortem — it establishes the incident's start time and the window of impact with precision.",
+        lesson: "Visualize the Error Timeline",
         goal: "Produce a 15-minute count timeseries of ERROR records.",
         hint: 'filter loglevel == "ERROR" then makeTimeseries errors = count(), interval: 15m',
         sampleData: generateAppLogs(500, 1),
@@ -1546,8 +1517,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Catch the slow queries",
         narration:
-          "Anything over 1000ms is suspect. Filter the database logs to just those calls.",
-        lesson: "fetch logs\n| filter duration_ms > 1000",
+          "When checkout latency spikes, the database is usually the first place to look. DataForge's database logs record `duration_ms` for every query, making it straightforward to isolate the offenders with a numeric threshold filter. `filter duration_ms > 1000` picks out every query that took more than a second — a reasonable threshold for a production OLTP database where normal queries should complete in tens or hundreds of milliseconds. This population is the evidence base for the investigation.",
+        lesson: "Filter on Numeric Threshold",
         goal: "Keep records where duration_ms > 1000.",
         hint: "filter duration_ms > 1000",
         sampleData: generateDbLogs(500, 1),
@@ -1560,9 +1531,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Profile the offending hosts",
         narration:
-          "For the slow calls, compute count, average, and worst-case latency per host in a single summarize.",
-        lesson:
-          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}",
+          "A single slow query is an anomaly; a pattern of slow queries on one host is a problem. Computing count, average, and max `duration_ms` per host in one `summarize` gives DataForge's DBA a complete profile: which hosts are generating slow queries, how many they produced, how bad the typical slow query was, and what the worst-case latency looked like. These three numbers together are far more diagnostic than any one alone — a host with high count and high max is the priority.",
+        lesson: "Multi-Metric Host Profile",
         goal: "Per host (slow calls only) compute count, avg, and max duration_ms.",
         hint: "filter duration_ms > 1000 then summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: {host}",
         sampleData: generateDbLogs(500, 1),
@@ -1588,9 +1558,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Name the culprit",
         narration:
-          "Sort the profile by worst-case latency — the host at the top is the one stealing the database.",
-        lesson:
-          "fetch logs\n| filter duration_ms > 1000\n| summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host}\n| sort max_ms desc",
+          "Sorting the profiled host table by `max_ms desc` surfaces the host whose single worst query was the most damaging — the most likely cause of the checkout timeout. The average might be acceptable on every host, but the max reveals which host is capable of producing the catastrophic outliers that users actually feel. At DataForge, this final `sort` step turns the performance profile into an actionable verdict: here is the host, here is the evidence.",
+        lesson: "Sort by Worst-Case Metric",
         goal: "Rank the per-host slow-query profile by max_ms, worst-first.",
         hint: "...summarize ... by: {host then sort max_ms desc}",
         sampleData: generateDbLogs(500, 1),
@@ -1627,10 +1596,10 @@ export const scenarios: Scenario[] = [
     steps: [
       {
         id: "step-1",
-        title: "Surface the amounts",
+        title: "Extract a Numeric Amount",
         narration:
-          "Payment amounts are embedded in the log content. Extract a numeric `amt` column so it can be aggregated.",
-        lesson: "fetch logs\n| fieldsAdd amt = toDouble(content)",
+          "PayStream's payment logs embed transaction amounts as text inside the `content` field rather than as a dedicated numeric column. Before you can aggregate money, you have to make it a number. `fieldsAdd amt = toDouble(content)` parses the content string and produces a proper floating-point column. This extraction step is a common pattern when working with legacy log formats — the data is there, it just needs to be shaped before aggregation functions can operate on it.",
+        lesson: "Extract a Numeric Amount",
         goal: "Add a numeric amt column derived from content.",
         hint: "fieldsAdd amt = toDouble(content)",
         sampleData: generatePaymentLogs(500, 1),
@@ -1641,11 +1610,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-2",
-        title: "Total revenue per gateway",
+        title: "Total Revenue by Gateway",
         narration:
-          "Sum the amounts grouped by payment host — the per-gateway takings finance needs to reconcile.",
-        lesson:
-          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: {host}",
+          "With a numeric `amt` column available, `summarize revenue = sum(amt), by: {host}` computes the total transaction value processed by each payment gateway. The `host` field in PayStream's payment logs identifies which gateway handled the transaction. This is the per-gateway revenue breakdown that finance uses to reconcile end-of-day takings — if the sum doesn't match the expected total, the discrepancy points to a specific gateway as the source of missing transactions.",
+        lesson: "Total Revenue by Gateway",
         goal: "Sum amt grouped by host.",
         hint: "fieldsAdd amt = toDouble(content) then summarize revenue = sum(amt), by: {host}",
         sampleData: generatePaymentLogs(500, 1),
@@ -1657,11 +1625,10 @@ export const scenarios: Scenario[] = [
       },
       {
         id: "step-3",
-        title: "Rank the gateways",
+        title: "Rank Gateways by Revenue",
         narration:
-          "Sort by revenue descending so the highest-earning gateway tops the reconciliation report.",
-        lesson:
-          "fetch logs\n| fieldsAdd amt = toDouble(content)\n| summarize revenue = sum(amt), by: {host}\n| sort revenue desc",
+          "Sorting the per-gateway revenue table descending puts the highest-earning gateway at the top of the reconciliation report. This ranking matters for two reasons: it establishes the expected contribution of each gateway, and it makes anomalies obvious — a gateway that processed far less revenue than usual in a given period stands out immediately in a sorted list. At PayStream, this final `sort revenue desc` turns a raw aggregation into an executive-ready report.",
+        lesson: "Rank Gateways by Revenue",
         goal: "Per-host revenue, ranked highest-first.",
         hint: "...summarize revenue = sum(amt), by: {host then sort revenue desc}",
         sampleData: generatePaymentLogs(500, 1),
@@ -1688,9 +1655,8 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Isolate the closed orders",
         narration:
-          "The `close_order` event marks the end of an order's lifecycle. Filter to just those events.",
-        lesson:
-          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"',
+          "Acme Corp's order lifecycle emits business events at each stage, and the `event.type` field identifies which stage each event represents. The `com.easytrade.close_order` event marks the terminal state of an order — whether it fulfilled successfully or was returned. Filtering to just these events gives you a population that represents every order that reached a final outcome, which is the right starting point for investigating fulfilment gaps.",
+        lesson: "Filter by Event Type",
         goal: "Keep only close_order business events.",
         hint: 'filter event.type == "com.easytrade.close_order"',
         sampleData: generateBizEvents(500, 1),
@@ -1703,9 +1669,8 @@ export const scenarios: Scenario[] = [
         id: "step-2",
         title: "Split fulfilled vs. returned",
         narration:
-          "Closed orders carry a `status` of fulfilled or returned. Count each outcome to size the phantom-order problem.",
-        lesson:
-          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| summarize n = count(), by: {status}',
+          "Among closed orders, the `status` field records whether the order was fulfilled or returned. A `summarize count(), by: {status}` produces the breakdown: two rows, one for each outcome. This is the diagnostic split — if the ratio of `returned` to `fulfilled` is higher than expected, that quantifies the scale of the phantom-order problem at Acme Corp. Counting by status rather than just counting all closures is what makes this a useful business metric rather than just an event volume.",
+        lesson: "Count Outcomes by Status",
         goal: "Among closed orders, count records grouped by status.",
         hint: 'filter event.type == "com.easytrade.close_order" then summarize n = count(), by: {status}',
         sampleData: generateBizEvents(500, 1),
@@ -1719,9 +1684,8 @@ export const scenarios: Scenario[] = [
         id: "step-3",
         title: "Quantify the returns",
         narration:
-          "Zero in on the `returned` orders and count them — the hard number of phantom orders to report to the business.",
-        lesson:
-          'fetch bizevents\n| filter event.type == "com.easytrade.close_order"\n| filter status == "returned"\n| summarize phantom_orders = count()',
+          "Drilling down to just the `returned` orders and producing a single count gives the business a hard number: this is how many phantom orders occurred in the query window. A plain `summarize count()` without a `by` clause collapses all matching records into one row — the answer to 'exactly how many?' rather than 'how do they break down?'. At Acme Corp, this single number is what goes into the customer-impact report and the engineering escalation ticket.",
+        lesson: "Count a Specific Outcome",
         goal: "Count closed orders whose status is 'returned'.",
         hint: 'filter event.type == "com.easytrade.close_order" then filter status == "returned" then summarize phantom_orders = count()',
         sampleData: generateBizEvents(500, 1),
