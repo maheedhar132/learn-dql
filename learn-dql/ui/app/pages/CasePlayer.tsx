@@ -51,7 +51,7 @@ export const CasePlayer = () => {
   if (!scenario || !step) {
     return (
       <Flex flexDirection="column" padding={32} gap={12}>
-        <Heading level={2}>Case not found</Heading>
+        <Heading level={2}>Lesson not found</Heading>
         <Link as={RouterLink} to="/learn">
           Back to Learn
         </Link>
@@ -60,6 +60,7 @@ export const CasePlayer = () => {
   }
 
   const isDqlStep = (step.expectedPipeline?.length ?? 0) > 0;
+  const isDplStep = !isDqlStep && !!step.dpl;
   const passed = result?.passed ?? false;
   const isLastStep = stepIndex === scenario.steps.length - 1;
 
@@ -111,7 +112,7 @@ export const CasePlayer = () => {
     <Flex flexDirection="column" padding={32} gap={20}>
       <Flex flexDirection="column" gap={4}>
         <Link as={RouterLink} to="/learn">
-          ← All cases
+          ← All lessons
         </Link>
         <Flex alignItems="center" gap={12}>
           <Heading level={1}>{scenario.title}</Heading>
@@ -141,7 +142,7 @@ export const CasePlayer = () => {
               disabled={!passed || !nextScenario}
               onClick={() => nextScenario && navigate(`/learn/${nextScenario.id}`)}
             >
-              {nextScenario ? "Next case →" : "All done!"}
+              {nextScenario ? "Next lesson →" : "All done!"}
             </Button>
           ) : (
             <Button
@@ -171,6 +172,14 @@ export const CasePlayer = () => {
                 Reference query — type it in the editor below and run it:
               </Paragraph>
               <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
+            </Flex>
+          )}
+          {!isDqlStep && step.referenceQuery && (
+            <Flex flexDirection="column" gap={6}>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
+                Reference query (conceptual — not validated offline):
+              </Paragraph>
+              <Code>{step.referenceQuery}</Code>
             </Flex>
           )}
         </Flex>
@@ -221,7 +230,7 @@ export const CasePlayer = () => {
             </Flex>
           )}
         </>
-      ) : (
+      ) : isDplStep ? (
         <Surface>
           <Flex flexDirection="column" padding={16} gap={8}>
             <Strong>Dynatrace Pattern Language exercise</Strong>
@@ -243,7 +252,7 @@ export const CasePlayer = () => {
             </Paragraph>
           </Flex>
         </Surface>
-      )}
+      ) : null}
     </Flex>
   );
 };

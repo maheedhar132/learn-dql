@@ -142,6 +142,16 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
     case "append":
       args.raw = rest;
       break;
+    case "join": {
+      // join [subquery], kind: inner|leftOuter, on: {field}
+      // For offline use, args.records is pre-seeded by the scenario; we just extract kind + on.
+      const kindMatch = rest.match(/\bkind\s*:\s*(\w+)/i);
+      if (kindMatch) args.kind = kindMatch[1].toLowerCase();
+      const onMatch = rest.match(/\bon\s*:\s*\{?(\w+)\}?/i);
+      if (onMatch) args.on = onMatch[1];
+      args.raw = rest;
+      break;
+    }
     case "data":
       args.raw = rest;
       break;

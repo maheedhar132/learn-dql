@@ -39,7 +39,7 @@ const CaseCard = ({
           ? `${scenario.briefing.slice(0, 140)}…`
           : scenario.briefing}
       </Paragraph>
-      <Paragraph>{scenario.steps.length} step(s)</Paragraph>
+      <Paragraph>{scenario.steps.length} lesson step{scenario.steps.length !== 1 ? "s" : ""}</Paragraph>
     </Flex>
   </Surface>
 );
@@ -50,9 +50,9 @@ export const Learn = () => {
   return (
     <Flex flexDirection="column" padding={32} gap={32}>
       <Flex flexDirection="column" gap={8}>
-        <Heading level={1}>Learn</Heading>
+        <Heading level={1}>Lessons</Heading>
         <Paragraph>
-          {ALL_SCENARIOS.length} guided cases · {completed.size} completed
+          {ALL_SCENARIOS.length} lessons · {completed.size} completed
         </Paragraph>
       </Flex>
 

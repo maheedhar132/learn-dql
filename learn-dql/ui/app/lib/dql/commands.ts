@@ -42,6 +42,8 @@ export function executeCommand(
       return execAppend(data, columns, args);
     case "makeTimeseries":
       return execMakeTimeseries(data, columns, args);
+    case "join":
+      return execJoin(data, columns, args);
     default:
       return { data, columns };
   }
@@ -656,6 +658,56 @@ export function evaluateCondition(condition: string, row: DQLRecord): boolean {
     default:
       return false;
   }
+}
+
+function execJoin(
+  data: DQLRecord[],
+  columns: DQLColumn[],
+  args: Record<string, unknown>
+): { data: DQLRecord[]; columns: DQLColumn[] } {
+  const kind = String(args.kind || "inner").toLowerCase();
+  const onField = String(args.on || "");
+  const rightRecords = (args.records as DQLRecord[]) || [];
+
+  if (!onField) return { data, columns };
+
+  const rightByKey = new Map<unknown, DQLRecord[]>();
+  for (const row of rightRecords) {
+    const k = row[onField];
+    if (!rightByKey.has(k)) rightByKey.set(k, []);
+    rightByKey.get(k)!.push(row);
+  }
+
+  const out: DQLRecord[] = [];
+  const rightKeys = new Set<string>();
+  for (const row of rightRecords) Object.keys(row).forEach((k) => rightKeys.add(k));
+
+  for (const leftRow of data) {
+    const k = leftRow[onField];
+    if (k == null) continue; // null keys never match
+    const matches = rightByKey.get(k);
+    if (matches && matches.length > 0) {
+      for (const rightRow of matches) {
+        out.push({ ...leftRow, ...rightRow });
+      }
+    } else if (kind === "leftouter") {
+      const nullFills: DQLRecord = {};
+      for (const rk of rightKeys) {
+        if (!(rk in leftRow)) nullFills[rk] = null;
+      }
+      out.push({ ...leftRow, ...nullFills });
+    }
+    // inner: rows with no match are dropped
+  }
+
+  const allKeys = new Set<string>();
+  for (const row of out) Object.keys(row).forEach((k) => allKeys.add(k));
+  const newCols = Array.from(allKeys).map((name) => {
+    const existing = columns.find((c) => c.name === name);
+    return existing || { name, type: "string" };
+  });
+
+  return { data: out, columns: newCols };
 }
 
 function parseAssignments(str: string): [string, string][] {

@@ -1698,4 +1698,141 @@ export const scenarios: Scenario[] = [
       },
     ],
   },
+
+  // ── Module 11: Combining Data Sources ─────────────────────────────────────
+  {
+    id: "case-append-001",
+    title: "Merging Two Streams with append",
+    company: "Streamline Analytics",
+    briefing:
+      "Streamline Analytics ingests application logs and infrastructure events into separate Grail tables. You need to create a unified view of all activity across both sources without losing any records.",
+    difficulty: "Intermediate",
+    track: "dql",
+    steps: [
+      {
+        id: "step-1",
+        title: "What append does — UNION ALL semantics",
+        narration:
+          "The `append` command stacks rows from a second query vertically onto the current result set — it is a UNION ALL operation. Unlike `join`, which matches rows horizontally on a shared key, `append` simply concatenates: every row from the left pipeline is kept, then every row from the right sub-pipeline is added below. Duplicate rows are preserved intentionally; if both sources contain the same event, both copies appear. This makes `append` the right tool when you want to combine two data streams that have no reliable shared key, or when you explicitly want all events from both sources, including duplicates.",
+        lesson: "UNION ALL with append",
+        goal: "Understand that append stacks rows from two sources without deduplication.",
+        hint: "No query to run for this concept step — read the narration carefully.",
+        sampleData: [],
+        expectedPipeline: [],
+        referenceQuery: "fetch logs\n| append [fetch events]",
+      },
+      {
+        id: "step-2",
+        title: "append is lightweight — allowed early in a pipeline",
+        narration:
+          "Unlike some commands that must come late in a pipeline, `append` can appear before `search` and other commands that normally precede filters. The recommended best practice is to filter inside the sub-query block `[...]` before the two streams are merged. This reduces the data volume that needs to travel through the rest of the pipeline. For example, if you only need ERROR-level events from both sources, apply `filter loglevel == \"ERROR\"` inside both the main pipeline and inside the `[...]` block rather than filtering after the merge. Filtering early is always cheaper — with `append` it is especially important because you are combining two potentially large datasets.",
+        lesson: "Filter Inside append Sub-queries",
+        goal: "Understand best practice: filter inside [...] to reduce data before merging.",
+        hint: 'Wrap the filter before the merge: fetch logs | filter loglevel == "ERROR" | append [fetch events | filter loglevel == "ERROR"]',
+        sampleData: [],
+        expectedPipeline: [],
+        referenceQuery:
+          'fetch logs\n| filter loglevel == "ERROR"\n| append [fetch events\n  | filter loglevel == "ERROR"]',
+      },
+      {
+        id: "step-3",
+        title: "Count records from two sources combined",
+        narration:
+          "Now that you understand how `append` merges rows, apply it with real data. The offline engine pre-seeds the right-side records so validation works without a live Grail connection. After the append, the result set contains rows from both sources. A `summarize count()` tells you the total combined record count — a quick sanity check that both sources contributed rows. In production this pattern is used to produce a single alert timeline from logs and audit events, or to merge synthetic test runs with live traffic before computing SLOs.",
+        lesson: "Summarize a Combined Dataset",
+        goal: "Fetch app logs, append pre-seeded event records, count all combined rows.",
+        hint: "fetch logs | append [...] | summarize total = count()",
+        sampleData: generateAppLogs(30, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "append",
+            args: {
+              records: [
+                { timestamp: "2024-01-15T10:00:00Z", loglevel: "INFO", content: "Event A", host: "host-01" },
+                { timestamp: "2024-01-15T10:01:00Z", loglevel: "WARN", content: "Event B", host: "host-02" },
+                { timestamp: "2024-01-15T10:02:00Z", loglevel: "ERROR", content: "Event C", host: "host-03" },
+                { timestamp: "2024-01-15T10:03:00Z", loglevel: "INFO", content: "Event D", host: "host-01" },
+                { timestamp: "2024-01-15T10:04:00Z", loglevel: "INFO", content: "Event E", host: "host-02" },
+              ],
+            },
+            raw: "append [fetch events]",
+          },
+          {
+            id: "e3",
+            command: "summarize",
+            args: { alias: "total", aggregation: "count", aggField: "", by: "" },
+            raw: "summarize total = count()",
+          },
+        ],
+      },
+    ],
+  },
+
+  // ── Module 12: Enriching Records with join ─────────────────────────────────
+  {
+    id: "case-join-001",
+    title: "Enriching Records with join",
+    company: "CloudOps Inc",
+    briefing:
+      "CloudOps Inc stores raw log records with a `host` field but no tier metadata. A separate service registry maps each host to a service tier. You need to enrich the log records by joining them against the registry.",
+    difficulty: "Advanced",
+    track: "dql",
+    steps: [
+      {
+        id: "step-1",
+        title: "How join works — left meets right",
+        narration:
+          "The `join` command is a relational operation: it matches rows from the left-side pipeline to rows from a sub-query on the right using a shared key field (specified with `on: {field}`). The left side is the main pipeline — potentially millions of records. The right side lives inside the `[...]` block and is capped at 128 MB in Dynatrace Grail; always put the smaller dataset on the right. Unlike `append`, which stacks rows vertically, `join` combines columns horizontally: each matched pair produces a single output row containing fields from both sides. The default join kind is `inner`, which means only rows that have a matching key on both sides appear in the result — unmatched rows are silently dropped.",
+        lesson: "join vs append — Horizontal vs Vertical Merge",
+        goal: "Understand that join matches rows by key and combines columns, unlike append.",
+        hint: "No query to run — read the narration to understand the concept.",
+        sampleData: [],
+        expectedPipeline: [],
+        referenceQuery:
+          "fetch logs\n| join kind:inner, on:{host}, [\n    fetch service_registry\n  ]",
+      },
+      {
+        id: "step-2",
+        title: "Inner join on a shared key",
+        narration:
+          "An inner join keeps only rows where the `on` field matches on both sides. Any log record whose `host` has no entry in the right-side registry is silently excluded from the result. There is one important caveat: **null key values never match** — even `null == null` is false in a join. A log record where `host` is null will always be dropped, regardless of join kind. This means inner joins are most reliable when the join key is guaranteed non-null on both sides. For CloudOps Inc, this gives a clean view of logs that can be attributed to a known service tier.",
+        lesson: "Inner Join — Only Matched Rows",
+        goal: "Join logs against service registry records on host; see only matched rows.",
+        hint: "fetch logs | join kind:inner, on:{host}, [fetch service_registry]",
+        sampleData: generateAppLogs(20, 1),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "join",
+            args: {
+              kind: "inner",
+              on: "host",
+              records: (() => {
+                const hosts = ["host-01", "host-02", "host-03", "host-04", "host-05"];
+                const tiers = ["gold", "silver", "bronze", "gold", "silver"];
+                return hosts.map((h, i) => ({ host: h, service_tier: tiers[i] }));
+              })(),
+            },
+            raw: "join kind:inner, on:{host}, [fetch service_registry]",
+          },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Left outer join — keep all left records",
+        narration:
+          "A `leftOuter` join keeps every row from the left side, whether or not it has a match on the right. Rows with no match still appear in the result; their right-side fields are set to `null`. This is the safer choice when you cannot afford to lose records. For CloudOps Inc, using `leftOuter` means log records from hosts not yet in the registry still appear — you just see `null` for `service_tier`. This is also a useful diagnostic: filtering the result to `isNull(service_tier)` immediately shows you which hosts are missing from your registry. The 128 MB right-side limit still applies; filter aggressively inside `[...]` to project only the columns you need before the join runs.",
+        lesson: "Left Outer Join — Preserve All Left Records",
+        goal: "Understand leftOuter: all left records appear, unmatched right fields become null.",
+        hint: "fetch logs | join kind:leftOuter, on:{host}, [fetch service_registry]",
+        sampleData: [],
+        expectedPipeline: [],
+        referenceQuery:
+          "fetch logs\n| join kind:leftOuter, on:{host}, [\n    fetch service_registry\n    | fields host, service_tier\n  ]\n| filter isNull(service_tier)",
+      },
+    ],
+  },
 ];

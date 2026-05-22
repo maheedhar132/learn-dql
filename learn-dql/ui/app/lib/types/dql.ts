@@ -85,6 +85,8 @@ export interface ScenarioStep {
   hint: string;
   sampleData: DQLRecord[];
   expectedPipeline: PipelineStage[];
+  /** For concept-only steps (no editor), an illustrative query to display as a code block. */
+  referenceQuery?: string;
   dpl?: {
     inputs: string[];
     expectedPattern: string;
