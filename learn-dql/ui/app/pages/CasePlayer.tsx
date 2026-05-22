@@ -36,16 +36,13 @@ export const CasePlayer = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isExploration, setIsExploration] = useState(false);
-  const [showHint, setShowHint] = useState(false);
 
   const step = scenario?.steps[stepIndex];
 
-  // Reset per-step UI when navigating between steps.
   useEffect(() => {
     setQuery("");
     setResult(null);
     setIsExploration(false);
-    setShowHint(false);
   }, [stepIndex, caseId]);
 
   if (!scenario || !step) {
@@ -61,21 +58,21 @@ export const CasePlayer = () => {
 
   const isDqlStep = (step.expectedPipeline?.length ?? 0) > 0;
   const isDplStep = !isDqlStep && !!step.dpl;
-  const passed = result?.passed ?? false;
+  // Concept-only steps (no editor) auto-pass so Next step is always enabled.
+  const passed = !isDqlStep || (result?.passed ?? false);
   const isLastStep = stepIndex === scenario.steps.length - 1;
+
+  function markAndAdvance(fn: () => void) {
+    if (!isDqlStep) markStepComplete(scenario!.id, stepIndex, scenario!.steps.length);
+    fn();
+  }
 
   function runWithQuery(q: string) {
     if (!step || !scenario) return;
     setIsExploration(false);
     const v = validateStep(q, step.expectedPipeline, step.sampleData);
     setResult(v);
-    if (v.passed) {
-      markStepComplete(scenario.id, stepIndex, scenario.steps.length);
-    }
-  }
-
-  function onRun() {
-    runWithQuery(query);
+    if (v.passed) markStepComplete(scenario.id, stepIndex, scenario.steps.length);
   }
 
   function onQueryModify(
@@ -97,7 +94,6 @@ export const CasePlayer = () => {
       return;
     }
     setQuery(newQuery);
-    // Run immediately as an exploration (no pass/fail validation).
     const outcome = runQuery(newQuery, step.sampleData);
     setIsExploration(true);
     setResult({
@@ -140,7 +136,7 @@ export const CasePlayer = () => {
             <Button
               variant="accent"
               disabled={!passed || !nextScenario}
-              onClick={() => nextScenario && navigate(`/learn/${nextScenario.id}`)}
+              onClick={() => markAndAdvance(() => nextScenario && navigate(`/learn/${nextScenario.id}`))}
             >
               {nextScenario ? "Next lesson →" : "All done!"}
             </Button>
@@ -148,7 +144,7 @@ export const CasePlayer = () => {
             <Button
               variant="accent"
               disabled={!passed}
-              onClick={() => setStepIndex((i) => i + 1)}
+              onClick={() => markAndAdvance(() => setStepIndex((i) => i + 1))}
             >
               Next step
             </Button>
@@ -169,7 +165,7 @@ export const CasePlayer = () => {
           {isDqlStep && (
             <Flex flexDirection="column" gap={6}>
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Reference query — type it in the editor below and run it:
+                Reference query — try writing it yourself in the editor below, or use Fill example:
               </Paragraph>
               <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
             </Flex>
@@ -177,11 +173,14 @@ export const CasePlayer = () => {
           {!isDqlStep && step.referenceQuery && (
             <Flex flexDirection="column" gap={6}>
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Reference query (conceptual — not validated offline):
+                Reference query (conceptual — not validated in the offline engine):
               </Paragraph>
               <Code>{step.referenceQuery}</Code>
             </Flex>
           )}
+          <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
+            Runs on an offline simulation engine with sample data. Results may differ from live Dynatrace Grail.
+          </Paragraph>
         </Flex>
       </Surface>
 
@@ -189,44 +188,58 @@ export const CasePlayer = () => {
         <>
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
           <Flex gap={8} alignItems="center">
-            <Button variant="accent" onClick={onRun}>
+            <Button variant="accent" onClick={() => runWithQuery(query)}>
               Run query
             </Button>
-            <Button onClick={() => setShowHint(true)}>Hint</Button>
+            <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>
+              Fill example
+            </Button>
           </Flex>
 
-          {showHint && (
-            <Surface>
-              <Flex padding={12} flexDirection="column" gap={4}>
-                <Strong>Hint</Strong>
-                <Paragraph>{step.hint}</Paragraph>
-              </Flex>
-            </Surface>
-          )}
-
           {result && (
-            <Flex
-              flexDirection="column"
-              gap={12}
-              padding={12}
-              style={{
-                borderRadius: 4,
-                background: isExploration
-                  ? Colors.Background.Container.Neutral.Default
-                  : result.passed
-                  ? Colors.Background.Container.Success.Default
-                  : Colors.Background.Container.Critical.Default,
-              }}
-            >
-              <Strong>{result.message}</Strong>
-              <Paragraph>
-                {isExploration ? "Result" : "Your result"} ({result.userOutcome.records.length} records):
-              </Paragraph>
-              <ResultTable
-                records={result.userOutcome.records}
-                columns={result.userOutcome.columns}
-                onQueryModify={onQueryModify}
-              />
+            <Flex flexDirection="column" gap={12}>
+              <Flex
+                flexDirection="column"
+                gap={12}
+                padding={12}
+                style={{
+                  borderRadius: 4,
+                  background: isExploration
+                    ? Colors.Background.Container.Neutral.Default
+                    : result.passed
+                    ? Colors.Background.Container.Success.Default
+                    : Colors.Background.Container.Critical.Default,
+                }}
+              >
+                <Strong>{result.message}</Strong>
+                <Paragraph>
+                  {isExploration ? "Result" : "Your result"} ({result.userOutcome.records.length} records):
+                </Paragraph>
+                <ResultTable
+                  records={result.userOutcome.records}
+                  columns={result.userOutcome.columns}
+                  onQueryModify={onQueryModify}
+                />
+              </Flex>
+
+              {!result.passed && !isExploration && result.expectedOutcome.records.length > 0 && (
+                <Flex
+                  flexDirection="column"
+                  gap={12}
+                  padding={12}
+                  style={{
+                    borderRadius: 4,
+                    background: Colors.Background.Container.Neutral.Default,
+                  }}
+                >
+                  <Strong>Expected result ({result.expectedOutcome.records.length} records):</Strong>
+                  <ResultTable
+                    records={result.expectedOutcome.records}
+                    columns={result.expectedOutcome.columns}
+                    onQueryModify={onQueryModify}
+                  />
+                </Flex>
+              )}
             </Flex>
           )}
         </>
@@ -245,10 +258,6 @@ export const CasePlayer = () => {
             <Paragraph>
               <Strong>Fields extracted:</Strong>{" "}
               {step.dpl?.expectedFields.join(", ")}
-            </Paragraph>
-            <Paragraph>
-              Interactive DPL pattern validation is wired into the engine
-              (lib/dpl) and will be enabled in this view next.
             </Paragraph>
           </Flex>
         </Surface>

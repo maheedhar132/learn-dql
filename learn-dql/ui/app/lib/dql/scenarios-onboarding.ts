@@ -25,7 +25,7 @@ export const onboardingScenarios: Scenario[] = [
         title: "Ask for the logs",
         narration:
           "Every DQL query begins with a 'fetch' command. Think of fetch as opening a filing cabinet. We're going to open the 'logs' drawer.",
-        lesson: "fetch logs",
+        lesson: "Opening a Data Source with fetch",
         goal: "Type 'fetch logs' to load the log records.",
         hint: "fetch <data-source>. Our data source here is logs.",
         sampleData: generateAppLogs(2200, 1),
@@ -36,7 +36,7 @@ export const onboardingScenarios: Scenario[] = [
         title: "Just show me the first few",
         narration:
           "2200 records is a lot. The 'limit' command keeps only the first N. Engineers use limit constantly while exploring data — it's like flipping to the first page of a book before reading the whole thing.",
-        lesson: "fetch logs | limit 5",
+        lesson: "Limiting Results with limit",
         goal: "Limit the result to 5 rows.",
         hint: "Add ' | limit 5' to the end. The pipe '|' chains commands together.",
         sampleData: generateAppLogs(2200, 1),
@@ -60,9 +60,9 @@ export const onboardingScenarios: Scenario[] = [
       {
         id: "step-1",
         title: "Open the cabinet",
-        narration: "Same as before — start with fetch.",
-        lesson: "fetch logs",
-        goal: "fetch logs.",
+        narration: "Every DQL pipeline starts with a `fetch` command that tells the engine which data store to open. You will write this line at the start of every query you build — it is the entry point into Grail. In this scenario we are working with application logs, so we open the `logs` source. Without a valid `fetch`, DQL has nothing to work with and will return an error.",
+        lesson: "Every Query Starts with fetch",
+        goal: "Start the pipeline by fetching application logs.",
         hint: "Just 'fetch logs'.",
         sampleData: generateAppLogs(2200, 2),
         expectedPipeline: [{ id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" }],
@@ -72,7 +72,7 @@ export const onboardingScenarios: Scenario[] = [
         title: "Keep only errors",
         narration:
           "Each log has a 'loglevel' field — INFO, WARN, or ERROR. We only care about the ERRORs (something actually went wrong). Filter is like a sieve: only rows that match the condition fall through.",
-        lesson: 'fetch logs | filter loglevel == "ERROR"',
+        lesson: "Filter Records with filter",
         goal: "Keep only rows where loglevel equals \"ERROR\".",
         hint: 'filter <field> == "<value>". Strings go in double quotes.',
         sampleData: generateAppLogs(2200, 2),
@@ -96,9 +96,9 @@ export const onboardingScenarios: Scenario[] = [
       {
         id: "step-1",
         title: "Errors only",
-        narration: "Get the logs and filter to errors.",
-        lesson: 'fetch logs | filter loglevel == "ERROR"',
-        goal: "fetch logs and filter to ERROR rows.",
+        narration: "DQL commands are chained with the pipe operator `|`. Each command in the chain receives the output of the previous one, transforms it, and passes it on. You have already used `fetch` and `filter` individually — now combine them: `fetch logs | filter loglevel == \"ERROR\"`. The pipe is what makes DQL composable: you can layer as many commands as you need, and each one narrows, enriches, or reshapes the data.",
+        lesson: "Chaining Commands with Pipes",
+        goal: "Chain fetch and filter with a pipe to keep only ERROR records.",
         hint: "Combine fetch + filter with a pipe.",
         sampleData: generateAppLogs(2200, 3),
         expectedPipeline: [
@@ -111,7 +111,7 @@ export const onboardingScenarios: Scenario[] = [
         title: "How many?",
         narration:
           "Now collapse those rows into a single number with summarize and the count() function. The result will be one row with one column: 'total'.",
-        lesson: 'fetch logs | filter loglevel == "ERROR" | summarize total = count()',
+        lesson: "Count Records with summarize",
         goal: "Add a summarize that produces a 'total' column equal to count().",
         hint: "summarize <alias> = count(). Don't forget the equals sign.",
         sampleData: generateAppLogs(2200, 3),
@@ -142,8 +142,8 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-1",
         title: "Count errors per host",
         narration:
-          "Use summarize count() with by:{host} to get one row per host. The host with the highest count is probably your incident.",
-        lesson: 'fetch logs | filter loglevel == "ERROR" | summarize count = count(), by:{host}',
+          "Adding `by: {field}` to a `summarize` command splits the records into groups before aggregating. Instead of one total count across all records, you get one row per unique value of the field — in this case, one row per host. This is called a grouped aggregation or a dimensional breakdown. For incident investigation, this is the most useful form of summarize: it immediately shows you which host, service, or region is generating the most noise.",
+        lesson: "Group Counts by a Field",
         goal: "Group the count by the host field.",
         hint: "summarize count = count(), by:{<field>}",
         sampleData: generateAppLogs(2200, 4),
@@ -174,9 +174,8 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-1",
         title: "Sort hosts by error count, worst first",
         narration:
-          "Take the previous query and add a sort step. Sort by count, descending.",
-        lesson:
-          'fetch logs | filter loglevel == "ERROR" | summarize count = count(), by:{host} | sort count desc',
+          "After a grouped summarize you have one row per host with a count, but they appear in arbitrary order. The `sort` command reorders them. Adding `desc` (descending) puts the largest values first — the noisiest host at the top, the quietest at the bottom. This is almost always what you want during an incident: you need to see the worst offender immediately, not scroll to find it.",
+        lesson: "Sort Results in Descending Order",
         goal: "Sort the summarized result by 'count' in descending order.",
         hint: "sort <field> desc",
         sampleData: generateAppLogs(2200, 5),
@@ -214,7 +213,7 @@ export const onboardingScenarios: Scenario[] = [
         title: "Extract the attacker IP",
         narration:
           "The auth log content looks like 'Failed login from IP:192.168.1.45 for user:admin'. The pattern 'IP:attacker_ip' tells DQL: find the literal text 'IP:', then capture what follows into a new field called attacker_ip.",
-        lesson: 'fetch logs | parse content, "IP:attacker_ip"',
+        lesson: "Extract Fields from Text with parse",
         goal: "Use parse to pull the IP into a new field 'attacker_ip'.",
         hint: 'parse <field>, "<pattern>"',
         sampleData: generateAuthLogs(2200, 6),

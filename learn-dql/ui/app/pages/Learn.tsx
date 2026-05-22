@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
@@ -8,14 +8,18 @@ import {
   Link,
 } from "@dynatrace/strato-components/typography";
 import { Chip } from "@dynatrace/strato-components/content";
+import { TextInput } from "@dynatrace/strato-components/forms";
+import { Button } from "@dynatrace/strato-components/buttons";
 import { ALL_SCENARIOS } from "../lib/dql";
 import { getProgress } from "../lib/progress";
 import type { Scenario } from "../lib/types/dql";
 
 const TRACK_ORDER: { key: string; title: string; blurb: string }[] = [
-  { key: "onboarding", title: "Onboarding", blurb: "Start here — DQL fundamentals." },
+  { key: "onboarding", title: "Onboarding", blurb: "New to DQL? Start here — 6 short lessons covering the fundamentals." },
   { key: "dql", title: "DQL", blurb: "Query, filter, aggregate and shape Grail data." },
 ];
+
+const FIRST_LESSON_ID = ALL_SCENARIOS[0]?.id;
 
 const CaseCard = ({
   scenario,
@@ -46,6 +50,19 @@ const CaseCard = ({
 
 export const Learn = () => {
   const completed = useMemo(() => new Set(getProgress().completedCases), []);
+  const isFirstVisit = completed.size === 0;
+  const [search, setSearch] = useState("");
+
+  const filterScenarios = (list: Scenario[]) => {
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        s.briefing.toLowerCase().includes(q) ||
+        s.company.toLowerCase().includes(q),
+    );
+  };
 
   return (
     <Flex flexDirection="column" padding={32} gap={32}>
@@ -56,9 +73,35 @@ export const Learn = () => {
         </Paragraph>
       </Flex>
 
+      {isFirstVisit && FIRST_LESSON_ID && (
+        <Surface>
+          <Flex padding={20} gap={16} alignItems="center" justifyContent="space-between">
+            <Flex flexDirection="column" gap={4}>
+              <Strong>New here? Start with the Onboarding track</Strong>
+              <Paragraph>
+                Six short lessons that take you from "what is a log?" to writing your first grouped query — no Dynatrace experience needed.
+              </Paragraph>
+            </Flex>
+            <Button
+              variant="accent"
+              as={RouterLink}
+              to={`/learn/${FIRST_LESSON_ID}`}
+            >
+              Start learning →
+            </Button>
+          </Flex>
+        </Surface>
+      )}
+
+      <TextInput
+        placeholder="Search lessons by title, topic, or company…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {TRACK_ORDER.map((track) => {
-        const cases = ALL_SCENARIOS.filter(
-          (s) => (s.track ?? "dql") === track.key,
+        const cases = filterScenarios(
+          ALL_SCENARIOS.filter((s) => (s.track ?? "dql") === track.key),
         );
         if (cases.length === 0) return null;
         return (
@@ -82,6 +125,15 @@ export const Learn = () => {
           </Flex>
         );
       })}
+
+      {search.trim() &&
+        TRACK_ORDER.every(
+          (t) =>
+            filterScenarios(ALL_SCENARIOS.filter((s) => (s.track ?? "dql") === t.key))
+              .length === 0,
+        ) && (
+          <Paragraph>No lessons match "{search}".</Paragraph>
+        )}
     </Flex>
   );
 };

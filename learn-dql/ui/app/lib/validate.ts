@@ -55,12 +55,20 @@ function canonicalRow(row: DQLRecord): string {
   return JSON.stringify(obj);
 }
 
-/** Order-insensitive multiset equality of two record sets. */
+function canonicalRowValues(row: DQLRecord): string {
+  return JSON.stringify(Object.values(row).map((v) => JSON.stringify(v)).sort());
+}
+
+/** Order-insensitive multiset equality. Falls back to values-only comparison
+ *  so different column aliases (e.g. cnt vs total) still pass. */
 export function recordsMatch(a: DQLRecord[], b: DQLRecord[]): boolean {
   if (a.length !== b.length) return false;
   const sa = a.map(canonicalRow).sort();
   const sb = b.map(canonicalRow).sort();
-  return sa.every((v, i) => v === sb[i]);
+  if (sa.every((v, i) => v === sb[i])) return true;
+  const va = a.map(canonicalRowValues).sort();
+  const vb = b.map(canonicalRowValues).sort();
+  return va.every((v, i) => v === vb[i]);
 }
 
 export interface ValidationResult {
