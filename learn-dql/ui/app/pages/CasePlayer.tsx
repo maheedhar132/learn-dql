@@ -198,7 +198,7 @@ export const CasePlayer = () => {
             </Flex>
           )}
           <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
-            Runs on an offline simulation engine with sample data. Results may differ from live Dynatrace Grail.
+            Free in-app simulation — learn without affecting your Dynatrace environment or incurring any charges.
           </Paragraph>
         </Flex>
       </Surface>
