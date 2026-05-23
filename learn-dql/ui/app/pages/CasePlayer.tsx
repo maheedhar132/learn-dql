@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
 import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
@@ -37,13 +37,42 @@ export const CasePlayer = () => {
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isExploration, setIsExploration] = useState(false);
 
-  const step = scenario?.steps[stepIndex];
+  // Reset step to 0 when navigating to a different scenario.
+  useEffect(() => {
+    setStepIndex(0);
+  }, [caseId]);
 
+  // Reset editor state whenever step or scenario changes.
   useEffect(() => {
     setQuery("");
     setResult(null);
     setIsExploration(false);
   }, [stepIndex, caseId]);
+
+  const step = scenario?.steps[stepIndex];
+  const isDqlStep = (step?.expectedPipeline?.length ?? 0) > 0;
+  const isDplStep = !isDqlStep && !!step?.dpl;
+  const passed = !isDqlStep || (result?.passed ?? false);
+  const isLastStep = !!scenario && stepIndex === scenario.steps.length - 1;
+
+  const runWithQuery = useCallback((q: string) => {
+    if (!step || !scenario) return;
+    setIsExploration(false);
+    const v = validateStep(q, step.expectedPipeline, step.sampleData);
+    setResult(v);
+    if (v.passed) markStepComplete(scenario.id, stepIndex, scenario.steps.length);
+  }, [step, scenario, stepIndex]);
+
+  // Ctrl/Cmd+Enter runs the query from anywhere on the page.
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && isDqlStep && query.trim()) {
+        runWithQuery(query);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [query, isDqlStep, runWithQuery]);
 
   if (!scenario || !step) {
     return (
@@ -56,23 +85,13 @@ export const CasePlayer = () => {
     );
   }
 
-  const isDqlStep = (step.expectedPipeline?.length ?? 0) > 0;
-  const isDplStep = !isDqlStep && !!step.dpl;
-  // Concept-only steps (no editor) auto-pass so Next step is always enabled.
-  const passed = !isDqlStep || (result?.passed ?? false);
-  const isLastStep = stepIndex === scenario.steps.length - 1;
-
   function markAndAdvance(fn: () => void) {
+    // Synchronously clear result so the passing state from the current step
+    // never leaks into the next step's initial render.
+    setResult(null);
+    setQuery("");
     if (!isDqlStep) markStepComplete(scenario!.id, stepIndex, scenario!.steps.length);
     fn();
-  }
-
-  function runWithQuery(q: string) {
-    if (!step || !scenario) return;
-    setIsExploration(false);
-    const v = validateStep(q, step.expectedPipeline, step.sampleData);
-    setResult(v);
-    if (v.passed) markStepComplete(scenario.id, stepIndex, scenario.steps.length);
   }
 
   function onQueryModify(
@@ -165,7 +184,7 @@ export const CasePlayer = () => {
           {isDqlStep && (
             <Flex flexDirection="column" gap={6}>
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Reference query — try writing it yourself in the editor below, or use Fill example:
+                Reference query — try writing it yourself, or use Fill example:
               </Paragraph>
               <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
             </Flex>
@@ -194,6 +213,9 @@ export const CasePlayer = () => {
             <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>
               Fill example
             </Button>
+            <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
+              Ctrl+Enter to run
+            </Paragraph>
           </Flex>
 
           {result && (

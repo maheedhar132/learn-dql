@@ -15,7 +15,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Welcome, Detective",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "Before we hunt incidents, you need to know what a log is and how Dynatrace stores them. A log is a single line a computer wrote down to remember what just happened — the timestamp, who did it, and what the result was. We'll start by asking the system to hand us those lines.",
     difficulty: "Beginner",
@@ -52,7 +52,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Filtering — keeping only what matters",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "Real systems write thousands of log lines per second. 99% of them are boring 'everything is fine' messages. The 'filter' command throws away rows you don't care about. It's the single most-used command in DQL.",
     difficulty: "Beginner",
@@ -88,7 +88,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Counting things — your first summary",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "When you're investigating an incident, you usually don't want to read every log line. You want a count: 'how many errors in the last hour?'. The 'summarize' command crunches many rows down to a small report.",
     difficulty: "Beginner",
@@ -133,7 +133,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Grouping — counting per category",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "A single number is useful, but 'how many errors per host?' is way more useful. Adding 'by:{...}' to summarize groups rows together before counting — like sorting laundry into piles before counting each pile.",
     difficulty: "Beginner",
@@ -165,7 +165,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Sorting — putting the worst first",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "Once you have counts per host, you want the noisiest host at the top. The 'sort' command orders rows. Use 'desc' (descending) to put the biggest number first — almost always what you want during an incident.",
     difficulty: "Beginner",
@@ -203,7 +203,7 @@ export const onboardingScenarios: Scenario[] = [
     track: "onboarding",
     tier: "free",
     title: "Parsing — pulling fields out of text",
-    company: "Day One",
+    company: "Dynatrace Academy",
     briefing:
       "Sometimes important info is buried inside the raw 'content' field of a log line — like an IP address or an error code. The 'parse' command extracts it into its own field so you can filter and group by it. (This is your bridge into DPL — the next track teaches the pattern grammar in depth.)",
     difficulty: "Beginner",

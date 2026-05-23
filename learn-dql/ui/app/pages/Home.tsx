@@ -19,10 +19,9 @@ export const Home = () => {
     const byTrack = (t: string) =>
       ALL_SCENARIOS.filter((s) => s.track === t).length;
     return [
-      { label: "Guided cases", value: String(ALL_SCENARIOS.length) },
+      { label: "Total lessons", value: String(ALL_SCENARIOS.length) },
       { label: "Onboarding", value: String(byTrack("onboarding")) },
       { label: "DQL", value: String(byTrack("dql")) },
-      { label: "DPL", value: String(byTrack("dpl")) },
     ];
   }, []);
 
@@ -36,13 +35,12 @@ export const Home = () => {
       />
       <Heading level={1}>Learn DQL</Heading>
       <Paragraph style={{ maxWidth: 640, textAlign: "center" }}>
-        Master the <Strong>Dynatrace Query Language</Strong> and{" "}
-        <Strong>Dynatrace Pattern Language</Strong> through hands-on, step-by-step
-        cases. Write real queries; each step is validated by comparing your
-        result to a reference — any correct query passes.
+        Master the <Strong>Dynatrace Query Language</Strong> through hands-on,
+        step-by-step lessons. Write real queries against sample data — any query
+        that produces the correct result passes. No exact syntax required.
       </Paragraph>
 
-      <Grid gridTemplateColumns="repeat(4, 1fr)" gap={16}>
+      <Grid gridTemplateColumns="repeat(3, 1fr)" gap={16}>
         {stats.map((s) => (
           <Surface key={s.label}>
             <Flex

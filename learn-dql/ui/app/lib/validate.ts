@@ -78,6 +78,16 @@ export interface ValidationResult {
   expectedOutcome: RunOutcome;
 }
 
+function diagnoseFailure(query: string, userCount: number, expectedCount: number): string {
+  const q = query.toLowerCase();
+  if (/filter\s+\w[\w.]*\s*=[^=]/.test(query)) return "Check your comparison operator — DQL uses == not =.";
+  if (/filter\s+\w[\w.]*\s*==\s*[^"'\d()\s]/.test(query)) return "String values need double quotes, e.g. == \"ERROR\".";
+  if (userCount === 0 && expectedCount > 0) return "Your query returned no records — check your filter conditions and field names.";
+  if (userCount > expectedCount) return `Too many records — your filter may be too broad (${userCount} vs ${expectedCount} expected).`;
+  if (userCount < expectedCount) return `Too few records — your filter may be too narrow (${userCount} vs ${expectedCount} expected).`;
+  return "Record counts match but values differ — check field names and aggregation aliases.";
+}
+
 /** Validate a learner query for a step by comparing results. */
 export function validateStep(
   query: string,
@@ -88,9 +98,10 @@ export function validateStep(
   const expectedOutcome = runExpected(expected, sampleData);
 
   if (userOutcome.error) {
+    const syntaxHint = /=[^=]/.test(query) ? " (tip: use == for comparison)" : "";
     return {
       passed: false,
-      message: `Query error: ${userOutcome.error}`,
+      message: `Query error: ${userOutcome.error}${syntaxHint}`,
       userOutcome,
       expectedOutcome,
     };
@@ -100,8 +111,7 @@ export function validateStep(
     passed,
     message: passed
       ? "Correct — your result matches the expected output."
-      : `Not yet. Your query returned ${userOutcome.records.length} record(s); ` +
-        `the expected result has ${expectedOutcome.records.length}.`,
+      : diagnoseFailure(query, userOutcome.records.length, expectedOutcome.records.length),
     userOutcome,
     expectedOutcome,
   };

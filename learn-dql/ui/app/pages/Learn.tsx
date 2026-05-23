@@ -53,10 +53,15 @@ export const Learn = () => {
   const isFirstVisit = completed.size === 0;
   const [search, setSearch] = useState("");
 
+  const DIFFICULTY_ORDER: Record<string, number> = { Beginner: 0, Intermediate: 1, Advanced: 2 };
+
   const filterScenarios = (list: Scenario[]) => {
-    if (!search.trim()) return list;
+    const sorted = [...list].sort(
+      (a, b) => (DIFFICULTY_ORDER[a.difficulty] ?? 9) - (DIFFICULTY_ORDER[b.difficulty] ?? 9),
+    );
+    if (!search.trim()) return sorted;
     const q = search.toLowerCase();
-    return list.filter(
+    return sorted.filter(
       (s) =>
         s.title.toLowerCase().includes(q) ||
         s.briefing.toLowerCase().includes(q) ||
@@ -96,7 +101,7 @@ export const Learn = () => {
       <TextInput
         placeholder="Search lessons by title, topic, or company…"
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(value) => setSearch(value ?? "")}
       />
 
       {TRACK_ORDER.map((track) => {

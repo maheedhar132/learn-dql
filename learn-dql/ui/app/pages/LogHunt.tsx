@@ -42,7 +42,7 @@ export const LogHunt = () => {
               </Paragraph>
 
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6 }}>
-                {scenario.tasks.length} investigation task{scenario.tasks.length !== 1 ? "s" : ""}
+                Open investigation · {scenario.difficulty}
               </Paragraph>
 
               <Button variant="accent" onClick={() => navigate(`/log-hunt/${scenario.id}`)}>
