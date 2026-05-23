@@ -1,29 +1,55 @@
-import React, { useState } from "react";
-import { Flex, Surface } from "@dynatrace/strato-components/layouts";
+import React, { useState, useEffect, useCallback } from "react";
+import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
   Strong,
+  Code,
+  Link,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
+import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { runQuery, type RunOutcome } from "../lib/validate";
 import { generateAppLogs } from "../lib/dql/log-generator";
 import { ResultTable } from "../components/ResultTable";
 
-// Deterministic offline sample data (no Grail / no deploy — PROJECT_DECK §6).
 const SAMPLE = generateAppLogs(200, 42);
 
-const DEFAULT_QUERY =
-  'fetch logs\n| filter loglevel == "ERROR"\n| limit 20';
+const DEFAULT_QUERY = 'fetch logs\n| filter loglevel == "ERROR"\n| limit 20';
+
+const SCHEMA_FIELDS = [
+  { name: "timestamp", type: "datetime", example: "2024-01-15T10:23:45Z", description: "When the log was written" },
+  { name: "loglevel", type: "string", example: "INFO · WARN · ERROR", description: "Severity level" },
+  { name: "content", type: "string", example: "Application message text", description: "Free-text log body" },
+  { name: "host", type: "string", example: "host-01 … host-10", description: "Source host identifier" },
+];
+
+const EXAMPLE_QUERIES = [
+  { label: "First 10 records", query: "fetch logs\n| limit 10" },
+  { label: "Only errors", query: 'fetch logs\n| filter loglevel == "ERROR"' },
+  { label: "Count by level", query: "fetch logs\n| summarize count(), by:{loglevel}" },
+  { label: "Errors per host", query: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize n = count(), by:{host}\n| sort n desc' },
+  { label: "Most recent first", query: "fetch logs\n| sort timestamp desc\n| limit 20" },
+];
 
 export const Sandbox = () => {
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
 
-  function runWithQuery(q: string) {
+  const runWithQuery = useCallback((q: string) => {
     setOutcome(runQuery(q, SAMPLE));
-  }
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && query.trim()) {
+        runWithQuery(query);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [query, runWithQuery]);
 
   function onQueryModify(action: "summarize" | "filter", fieldName: string, filterValue?: string) {
     let newQuery: string;
@@ -43,38 +69,94 @@ export const Sandbox = () => {
       <Flex flexDirection="column" gap={4}>
         <Heading level={1}>Sandbox</Heading>
         <Paragraph>
-          Free-form DQL against a deterministic offline dataset (200 sample
-          app-log records). Runs entirely in the browser engine.
+          Free-form DQL against a deterministic offline dataset — 200 sample app-log records.
+          Runs entirely in the browser. No Dynatrace environment required.
         </Paragraph>
       </Flex>
 
-      <DQLEditor value={query} onChange={(v) => setQuery(v)} />
-      <Flex>
-        <Button variant="accent" onClick={() => runWithQuery(query)}>
-          Run query
-        </Button>
-      </Flex>
+      <Grid gridTemplateColumns="1fr 300px" gap={20} alignItems="start">
+        {/* ── Left: editor + results ── */}
+        <Flex flexDirection="column" gap={12}>
+          <DQLEditor value={query} onChange={(v) => setQuery(v)} />
+          <Flex gap={8} alignItems="center">
+            <Button variant="accent" onClick={() => runWithQuery(query)}>Run query</Button>
+            <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>Ctrl+Enter to run</Paragraph>
+          </Flex>
 
-      {outcome && (
-        <Flex flexDirection="column" gap={8}>
-          {outcome.error ? (
-            <Surface>
-              <Flex padding={12}>
-                <Strong>Error: {outcome.error}</Strong>
-              </Flex>
-            </Surface>
-          ) : (
-            <>
-              <Paragraph>{outcome.records.length} record(s)</Paragraph>
-              <ResultTable
-                records={outcome.records}
-                columns={outcome.columns}
-                onQueryModify={onQueryModify}
-              />
-            </>
+          {outcome && (
+            <Flex flexDirection="column" gap={12}>
+              {outcome.error ? (
+                <MessageContainer variant="critical">
+                  <MessageContainer.Title>Query error</MessageContainer.Title>
+                  <MessageContainer.Description>{outcome.error}</MessageContainer.Description>
+                </MessageContainer>
+              ) : (
+                <>
+                  <Paragraph>{outcome.records.length} record(s)</Paragraph>
+                  <ResultTable
+                    records={outcome.records}
+                    columns={outcome.columns}
+                    onQueryModify={onQueryModify}
+                  />
+                </>
+              )}
+            </Flex>
           )}
         </Flex>
-      )}
+
+        {/* ── Right: schema panel ── */}
+        <Surface>
+          <Flex flexDirection="column" padding={16} gap={16}>
+            <Flex flexDirection="column" gap={4}>
+              <Strong>Available fields</Strong>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
+                fetch logs · 200 sample records
+              </Paragraph>
+            </Flex>
+
+            <Flex flexDirection="column" gap={12}>
+              {SCHEMA_FIELDS.map((f) => (
+                <Flex key={f.name} flexDirection="column" gap={2}>
+                  <Flex alignItems="center" gap={8}>
+                    <Code>{f.name}</Code>
+                    <Chip>{f.type}</Chip>
+                  </Flex>
+                  <Paragraph style={{ fontSize: "0.8rem", opacity: 0.7, margin: 0 }}>
+                    {f.description}
+                  </Paragraph>
+                  <Paragraph style={{ fontSize: "0.75rem", opacity: 0.5, margin: 0 }}>
+                    e.g. {f.example}
+                  </Paragraph>
+                </Flex>
+              ))}
+            </Flex>
+
+            <Divider />
+
+            <Flex flexDirection="column" gap={8}>
+              <Strong>Example queries</Strong>
+              <Flex flexDirection="column" gap={6}>
+                {EXAMPLE_QUERIES.map((ex) => (
+                  <Flex key={ex.label} flexDirection="column" gap={2}>
+                    <Link
+                      onClick={() => { setQuery(ex.query); setOutcome(null); }}
+                      style={{ fontSize: "0.85rem", cursor: "pointer" }}
+                    >
+                      {ex.label}
+                    </Link>
+                  </Flex>
+                ))}
+              </Flex>
+            </Flex>
+
+            <Divider />
+
+            <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
+              Free in-app simulation — no Dynatrace charges.
+            </Paragraph>
+          </Flex>
+        </Surface>
+      </Grid>
     </Flex>
   );
 };
