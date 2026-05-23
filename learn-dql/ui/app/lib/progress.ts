@@ -6,19 +6,21 @@ const KEY = "learn-dql.progress.v1";
 interface ProgressShape {
   completedCases: string[];
   completedSteps: Record<string, number[]>; // caseId -> step indexes
+  completedHunts: string[];
 }
 
 function read(): ProgressShape {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { completedCases: [], completedSteps: {} };
+    if (!raw) return { completedCases: [], completedSteps: {}, completedHunts: [] };
     const parsed = JSON.parse(raw) as Partial<ProgressShape>;
     return {
       completedCases: parsed.completedCases ?? [],
       completedSteps: parsed.completedSteps ?? {},
+      completedHunts: parsed.completedHunts ?? [],
     };
   } catch {
-    return { completedCases: [], completedSteps: {} };
+    return { completedCases: [], completedSteps: {}, completedHunts: [] };
   }
 }
 
@@ -36,6 +38,10 @@ export function getProgress(): ProgressShape {
 
 export function isCaseComplete(caseId: string): boolean {
   return read().completedCases.includes(caseId);
+}
+
+export function isHuntComplete(huntId: string): boolean {
+  return read().completedHunts.includes(huntId);
 }
 
 export function completedStepCount(caseId: string): number {
@@ -58,4 +64,12 @@ export function markStepComplete(
     p.completedCases.push(caseId);
   }
   write(p);
+}
+
+export function markHuntComplete(huntId: string): void {
+  const p = read();
+  if (!p.completedHunts.includes(huntId)) {
+    p.completedHunts.push(huntId);
+    write(p);
+  }
 }

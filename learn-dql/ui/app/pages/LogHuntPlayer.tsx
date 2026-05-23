@@ -13,6 +13,7 @@ import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import Colors from "@dynatrace/strato-design-tokens/colors";
 import { logHuntScenarios, type LogHuntMCQ } from "../lib/dql/log-hunt-scenarios";
 import { runQuery } from "../lib/validate";
+import { markHuntComplete } from "../lib/progress";
 import { ResultTable } from "../components/ResultTable";
 import type { RunOutcome } from "../lib/validate";
 
@@ -211,7 +212,13 @@ export const LogHuntPlayer = () => {
 
       <Divider />
 
-      <MCQPanel mcq={scenario.mcq} onSolved={() => setCaseSolved(true)} />
+      <MCQPanel
+    mcq={scenario.mcq}
+    onSolved={() => {
+      setCaseSolved(true);
+      markHuntComplete(huntId!);
+    }}
+  />
 
       {caseSolved && (
         <Surface>
