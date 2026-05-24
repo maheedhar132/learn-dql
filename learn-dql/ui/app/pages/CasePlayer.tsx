@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
 import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
@@ -35,6 +35,7 @@ export const CasePlayer = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isExploration, setIsExploration] = useState(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setStepIndex(0);
@@ -45,6 +46,10 @@ export const CasePlayer = () => {
     setResult(null);
     setIsExploration(false);
   }, [stepIndex, caseId]);
+
+  useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [result]);
 
   const step = scenario?.steps[stepIndex];
   const isDqlStep = (step?.expectedPipeline?.length ?? 0) > 0;
@@ -191,11 +196,12 @@ export const CasePlayer = () => {
           <Flex gap={8} alignItems="center">
             <Button variant="accent" onClick={() => runWithQuery(query)}>Run query</Button>
             <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>Fill example</Button>
+            <Button onClick={() => { setQuery(""); setResult(null); }}>Clear</Button>
             <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>Ctrl+Enter to run</Paragraph>
           </Flex>
 
           {result && (
-            <Flex flexDirection="column" gap={12}>
+            <Flex ref={resultRef} flexDirection="column" gap={12}>
               {/* ── Status banner ── */}
               {isSuccess && (
                 <MessageContainer variant="success">
@@ -259,6 +265,34 @@ export const CasePlayer = () => {
                     />
                   </Flex>
                 </Surface>
+              )}
+
+              {/* ── Next lesson callout on last step pass ── */}
+              {isSuccess && isLastStep && nextScenario && (
+                <Surface>
+                  <Flex flexDirection="column" padding={16} gap={10} alignItems="flex-start">
+                    <Chip color="success">Lesson complete</Chip>
+                    <Heading level={3} style={{ margin: 0 }}>Up next: {nextScenario.title}</Heading>
+                    <Paragraph style={{ opacity: 0.8, margin: 0 }}>{nextScenario.briefing}</Paragraph>
+                    <Button
+                      variant="accent"
+                      onClick={() => markAndAdvance(() => navigate(`/learn/${nextScenario.id}`))}
+                    >
+                      Start next lesson →
+                    </Button>
+                  </Flex>
+                </Surface>
+              )}
+              {isSuccess && isLastStep && !nextScenario && (
+                <MessageContainer variant="success">
+                  <MessageContainer.Title>You've completed all lessons!</MessageContainer.Title>
+                  <MessageContainer.Description>
+                    Head to Log Hunt to put your DQL skills to the test on real-world incident scenarios.
+                  </MessageContainer.Description>
+                  <MessageContainer.Actions>
+                    <Button onClick={() => navigate("/log-hunt")}>Go to Log Hunt</Button>
+                  </MessageContainer.Actions>
+                </MessageContainer>
               )}
             </Flex>
           )}

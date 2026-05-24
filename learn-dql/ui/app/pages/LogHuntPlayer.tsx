@@ -1,28 +1,41 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
-import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
   Strong,
+  Code,
   Link,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip } from "@dynatrace/strato-components/content";
+import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import Colors from "@dynatrace/strato-design-tokens/colors";
 import { logHuntScenarios, type LogHuntMCQ } from "../lib/dql/log-hunt-scenarios";
 import { runQuery } from "../lib/validate";
+import { markHuntComplete } from "../lib/progress";
 import { ResultTable } from "../components/ResultTable";
 import type { RunOutcome } from "../lib/validate";
 
+// ─── Derive fields from sample data ──────────────────────────────────────────
+
+function deriveFields(records: ReturnType<typeof runQuery>["records"]): string[] {
+  if (records.length === 0) return [];
+  const first = records[0] as Record<string, unknown>;
+  return Object.keys(first).filter((k) => k !== "content");
+}
+
 // ─── Free-form query sandbox ──────────────────────────────────────────────────
 
-function QuerySandbox({ sampleData }: { sampleData: ReturnType<typeof runQuery>["records"] }) {
+function QuerySandbox({
+  sampleData,
+}: {
+  sampleData: ReturnType<typeof runQuery>["records"];
+}) {
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
 
-  // sampleData is actually DQLRecord[] — keep param typed simply
   function run() {
     setOutcome(runQuery(query, sampleData as Parameters<typeof runQuery>[1]));
   }
@@ -39,15 +52,24 @@ function QuerySandbox({ sampleData }: { sampleData: ReturnType<typeof runQuery>[
         onChange={(v) => setQuery(v ?? "")}
         style={{ minHeight: 100 }}
       />
-      <Flex gap={8}>
-        <Button variant="accent" onClick={run}>Run query</Button>
+      <Flex gap={8} alignItems="center">
+        <Button variant="accent" onClick={run}>
+          Run query
+        </Button>
+        <Button onClick={() => { setQuery(""); setOutcome(null); }}>
+          Clear
+        </Button>
+        <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
+          Ctrl+Enter to run
+        </Paragraph>
       </Flex>
       {outcome && (
-        <Flex flexDirection="column" gap={4}>
+        <Flex flexDirection="column" gap={8}>
           {outcome.error ? (
-            <Paragraph style={{ color: Colors.Charts.Threshold.Bad.Default, fontSize: "0.875rem" }}>
-              {outcome.error}
-            </Paragraph>
+            <MessageContainer variant="critical">
+              <MessageContainer.Title>Query error</MessageContainer.Title>
+              <MessageContainer.Description>{outcome.error}</MessageContainer.Description>
+            </MessageContainer>
           ) : (
             <>
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6 }}>
@@ -59,11 +81,13 @@ function QuerySandbox({ sampleData }: { sampleData: ReturnType<typeof runQuery>[
                 maxRows={100}
                 onQueryModify={(action, fieldName, filterValue) => {
                   const base = query || "fetch logs";
-                  applyModify(action === "summarize"
-                    ? `${base}\n| summarize count(), by:{${fieldName}}`
-                    : action === "filter" && filterValue
-                    ? `${base}\n| filter ${fieldName} ${filterValue}`
-                    : base);
+                  applyModify(
+                    action === "summarize"
+                      ? `${base}\n| summarize count(), by:{${fieldName}}`
+                      : action === "filter" && filterValue
+                      ? `${base}\n| filter ${fieldName} ${filterValue}`
+                      : base,
+                  );
                 }}
               />
             </>
@@ -72,6 +96,18 @@ function QuerySandbox({ sampleData }: { sampleData: ReturnType<typeof runQuery>[
       )}
     </Flex>
   );
+}
+
+// ─── Keyboard shortcut wiring ─────────────────────────────────────────────────
+
+function useCtrlEnter(fn: () => void) {
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") fn();
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [fn]);
 }
 
 // ─── MCQ ──────────────────────────────────────────────────────────────────────
@@ -92,9 +128,11 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
     <Surface
       style={{
         borderLeft: `3px solid ${
-          correct ? Colors.Charts.Threshold.Good.Default
-          : wrong   ? Colors.Charts.Threshold.Bad.Default
-          : "transparent"
+          correct
+            ? Colors.Charts.Threshold.Good.Default
+            : wrong
+            ? Colors.Charts.Threshold.Bad.Default
+            : "transparent"
         }`,
         transition: "border-color 0.2s",
       }}
@@ -102,33 +140,48 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
       <Flex flexDirection="column" padding={16} gap={16}>
         <Flex alignItems="center" gap={12}>
           <Chip>Final Verdict</Chip>
-          <Paragraph style={{ fontWeight: 600, margin: 0 }}>{mcq.question}</Paragraph>
+          <Paragraph style={{ fontWeight: 600, margin: 0 }}>
+            {mcq.question}
+          </Paragraph>
         </Flex>
 
         <Flex flexDirection="column" gap={8}>
           {mcq.options.map((opt) => {
             const isSelected = selected === opt;
             const isCorrectOpt = submitted && opt === mcq.correctAnswer;
-            const isWrongOpt   = submitted && isSelected && opt !== mcq.correctAnswer;
+            const isWrongOpt =
+              submitted && isSelected && opt !== mcq.correctAnswer;
             return (
               <Button
                 key={opt}
                 variant="default"
-                onClick={() => { if (!submitted) setSelected(opt); }}
+                onClick={() => {
+                  if (!submitted) setSelected(opt);
+                }}
                 style={{
                   justifyContent: "flex-start",
-                  background: isCorrectOpt ? `${Colors.Charts.Threshold.Good.Default}22`
-                    : isWrongOpt ? `${Colors.Charts.Threshold.Bad.Default}22`
-                    : isSelected ? "rgba(127,127,127,0.15)"
+                  background: isCorrectOpt
+                    ? `${Colors.Charts.Threshold.Good.Default}22`
+                    : isWrongOpt
+                    ? `${Colors.Charts.Threshold.Bad.Default}22`
+                    : isSelected
+                    ? "rgba(127,127,127,0.15)"
                     : "transparent",
                   border: isSelected
-                    ? `1px solid ${isCorrectOpt ? Colors.Charts.Threshold.Good.Default : isWrongOpt ? Colors.Charts.Threshold.Bad.Default : "rgba(127,127,127,0.4)"}`
+                    ? `1px solid ${
+                        isCorrectOpt
+                          ? Colors.Charts.Threshold.Good.Default
+                          : isWrongOpt
+                          ? Colors.Charts.Threshold.Bad.Default
+                          : "rgba(127,127,127,0.4)"
+                      }`
                     : "1px solid transparent",
                   cursor: submitted ? "default" : "pointer",
                   fontWeight: isSelected ? 600 : 400,
                 }}
               >
-                {isCorrectOpt ? "✓ " : isWrongOpt ? "✗ " : ""}{opt}
+                {isCorrectOpt ? "✓ " : isWrongOpt ? "✗ " : ""}
+                {opt}
               </Button>
             );
           })}
@@ -141,12 +194,14 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
         )}
 
         {submitted && (
-          <Paragraph style={{
-            color: correct ? Colors.Charts.Threshold.Good.Default : Colors.Charts.Threshold.Bad.Default,
-            fontSize: "0.9rem",
-          }}>
-            {correct ? "✓ Correct! " : "✗ Wrong. "}{mcq.explanation}
-          </Paragraph>
+          <MessageContainer variant={correct ? "success" : "critical"}>
+            <MessageContainer.Title>
+              {correct ? "Correct verdict!" : "Wrong verdict"}
+            </MessageContainer.Title>
+            <MessageContainer.Description>
+              {mcq.explanation}
+            </MessageContainer.Description>
+          </MessageContainer>
         )}
       </Flex>
     </Surface>
@@ -160,77 +215,204 @@ export const LogHuntPlayer = () => {
   const navigate = useNavigate();
   const scenario = logHuntScenarios.find((s) => s.id === huntId);
   const [caseSolved, setCaseSolved] = useState(false);
+  const [hintIndex, setHintIndex] = useState(-1); // -1 = no hints shown yet
 
-  useEffect(() => { setCaseSolved(false); }, [huntId]);
+  useEffect(() => {
+    setCaseSolved(false);
+    setHintIndex(-1);
+  }, [huntId]);
+
+  const nextHuntIndex =
+    logHuntScenarios.findIndex((s) => s.id === huntId) + 1;
+  const nextHunt = logHuntScenarios[nextHuntIndex];
+
+  const sampleData = useMemo(
+    () => scenario?.tasks[0]?.sampleData ?? [],
+    [scenario],
+  );
+  const fieldNames = useMemo(() => deriveFields(sampleData), [sampleData]);
+  const hints = scenario?.hints ?? [];
+  const hasMoreHints = hintIndex < hints.length - 1;
 
   if (!scenario) {
     return (
       <Flex flexDirection="column" padding={32} gap={12}>
         <Heading level={2}>Hunt not found</Heading>
-        <Link as={RouterLink} to="/log-hunt">Back to Log Hunt</Link>
+        <Link as={RouterLink} to="/log-hunt">
+          Back to Log Hunt
+        </Link>
       </Flex>
     );
   }
 
-  const nextHuntIndex = logHuntScenarios.findIndex((s) => s.id === huntId) + 1;
-  const nextHunt = logHuntScenarios[nextHuntIndex];
-
-  // Collect all sample data across tasks (they share the same dataset per hunt)
-  const sampleData = scenario.tasks[0]?.sampleData ?? [];
-
   return (
-    <Flex flexDirection="column" padding={32} gap={24}>
-      <Flex flexDirection="column" gap={6}>
-        <Link as={RouterLink} to="/log-hunt">← All hunts</Link>
-        <Flex alignItems="center" gap={12}>
-          <Heading level={1}>{scenario.emoji} {scenario.title}</Heading>
-          <Chip>{scenario.difficulty}</Chip>
-          {caseSolved && <Chip color="success">Case closed</Chip>}
+    <Grid gridTemplateColumns="1fr 260px" gap={24} style={{ padding: 32 }} alignItems="start">
+      {/* ── Main column ── */}
+      <Flex flexDirection="column" gap={24}>
+        {/* Header */}
+        <Flex flexDirection="column" gap={6}>
+          <Link as={RouterLink} to="/log-hunt">
+            ← All hunts
+          </Link>
+          <Flex alignItems="center" gap={12} flexWrap="wrap">
+            <Heading level={1}>
+              {scenario.emoji} {scenario.title}
+            </Heading>
+            <Chip>{scenario.difficulty}</Chip>
+            {caseSolved && <Chip color="success">Case closed</Chip>}
+          </Flex>
         </Flex>
+
+        <Divider />
+
+        {/* Story */}
+        <Surface>
+          <Flex flexDirection="column" padding={16} gap={12}>
+            <Heading level={3} style={{ margin: 0 }}>
+              The Briefing
+            </Heading>
+            <Paragraph>{scenario.story}</Paragraph>
+          </Flex>
+        </Surface>
+
+        {/* Investigation guide */}
+        <Surface>
+          <Flex flexDirection="column" padding={16} gap={12}>
+            <Heading level={3} style={{ margin: 0 }}>
+              Your Investigation
+            </Heading>
+            <Paragraph>{scenario.investigation}</Paragraph>
+          </Flex>
+        </Surface>
+
+        <Divider />
+
+        {/* Query sandbox */}
+        <QuerySandbox sampleData={sampleData} />
+
+        <Divider />
+
+        {/* MCQ */}
+        <MCQPanel
+          mcq={scenario.mcq}
+          onSolved={() => {
+            setCaseSolved(true);
+            markHuntComplete(huntId!);
+          }}
+        />
+
+        {/* Completion card */}
+        {caseSolved && (
+          <Surface>
+            <Flex
+              flexDirection="column"
+              padding={16}
+              gap={12}
+              alignItems="center"
+            >
+              <Heading level={2} style={{ textAlign: "center" }}>
+                Case closed! 🎉
+              </Heading>
+              <Paragraph style={{ textAlign: "center", opacity: 0.8 }}>
+                You cracked <Strong>{scenario.title}</Strong>.
+              </Paragraph>
+              <Flex gap={12}>
+                <Button
+                  variant="default"
+                  onClick={() => navigate("/log-hunt")}
+                >
+                  All hunts
+                </Button>
+                {nextHunt && (
+                  <Button
+                    variant="accent"
+                    onClick={() => navigate(`/log-hunt/${nextHunt.id}`)}
+                  >
+                    Next: {nextHunt.emoji} {nextHunt.title} →
+                  </Button>
+                )}
+              </Flex>
+            </Flex>
+          </Surface>
+        )}
       </Flex>
 
-      <Divider />
-
-      <Surface>
-        <Flex flexDirection="column" padding={16} gap={12}>
-          <Heading level={3} style={{ margin: 0 }}>The Briefing</Heading>
-          <Paragraph>{scenario.story}</Paragraph>
-        </Flex>
-      </Surface>
-
-      <Surface>
-        <Flex flexDirection="column" padding={16} gap={12}>
-          <Heading level={3} style={{ margin: 0 }}>Your Investigation</Heading>
-          <Paragraph>{scenario.investigation}</Paragraph>
-        </Flex>
-      </Surface>
-
-      <Divider />
-
-      <QuerySandbox sampleData={sampleData} />
-
-      <Divider />
-
-      <MCQPanel mcq={scenario.mcq} onSolved={() => setCaseSolved(true)} />
-
-      {caseSolved && (
+      {/* ── Sidebar ── */}
+      <Flex flexDirection="column" gap={16}>
+        {/* Available fields */}
         <Surface>
-          <Flex flexDirection="column" padding={16} gap={12} alignItems="center">
-            <Heading level={2} style={{ textAlign: "center" }}>Case closed! 🎉</Heading>
-            <Paragraph style={{ textAlign: "center", opacity: 0.8 }}>
-              You cracked <Strong>{scenario.title}</Strong>.
+          <Flex flexDirection="column" padding={16} gap={12}>
+            <Strong>Available fields</Strong>
+            <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
+              Fields you can query in fetch logs
             </Paragraph>
-            <Flex gap={12}>
-              <Button variant="default" onClick={() => navigate("/log-hunt")}>All hunts</Button>
-              {nextHunt && (
-                <Button variant="accent" onClick={() => navigate(`/log-hunt/${nextHunt.id}`)}>
-                  Next: {nextHunt.emoji} {nextHunt.title} →
-                </Button>
+            <Flex flexDirection="column" gap={6}>
+              {fieldNames.map((f) => (
+                <Code key={f}>{f}</Code>
+              ))}
+              {fieldNames.length > 0 && (
+                <Code>content</Code>
               )}
             </Flex>
           </Flex>
         </Surface>
-      )}
-    </Flex>
+
+        {/* Investigation tasks */}
+        <Surface>
+          <Flex flexDirection="column" padding={16} gap={12}>
+            <Strong>Investigation tasks</Strong>
+            <Flex flexDirection="column" gap={10}>
+              {scenario.tasks.map((task, i) => (
+                <Flex key={task.id} flexDirection="column" gap={4}>
+                  <Paragraph style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>
+                    {i + 1}. {task.question}
+                  </Paragraph>
+                  <Paragraph style={{ fontSize: "0.78rem", opacity: 0.55, margin: 0 }}>
+                    Hint: {task.solution}
+                  </Paragraph>
+                </Flex>
+              ))}
+            </Flex>
+          </Flex>
+        </Surface>
+
+        {/* Progressive hints */}
+        {hints.length > 0 && (
+          <Surface>
+            <Flex flexDirection="column" padding={16} gap={12}>
+              <Strong>Hints</Strong>
+              {hintIndex >= 0 && (
+                <Flex flexDirection="column" gap={8}>
+                  {hints.slice(0, hintIndex + 1).map((h, i) => (
+                    <Paragraph key={i} style={{ fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>
+                      {i + 1}. {h}
+                    </Paragraph>
+                  ))}
+                </Flex>
+              )}
+              {hasMoreHints ? (
+                <Button
+                  variant="default"
+                  onClick={() => setHintIndex((n) => n + 1)}
+                >
+                  {hintIndex < 0 ? "Show first hint" : "Show next hint"}
+                </Button>
+              ) : (
+                hintIndex >= 0 && (
+                  <Paragraph style={{ fontSize: "0.78rem", opacity: 0.5, margin: 0 }}>
+                    All hints revealed.
+                  </Paragraph>
+                )
+              )}
+            </Flex>
+          </Surface>
+        )}
+
+        {/* Disclaimer */}
+        <Paragraph style={{ fontSize: "0.72rem", opacity: 0.35, margin: 0 }}>
+          Free in-app simulation — no Dynatrace charges.
+        </Paragraph>
+      </Flex>
+    </Grid>
   );
 };
