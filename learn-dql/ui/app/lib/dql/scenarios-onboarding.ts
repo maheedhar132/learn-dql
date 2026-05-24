@@ -259,7 +259,7 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-2",
         title: "Extract the attacker IP with parse",
         narration:
-          "You saw the IP embedded in `content` as `IP:192.168.1.x`. Now extract it. The `parse` command takes a field name and a pattern string. In the pattern, `IP:` is literal text that DQL scans for — it's the anchor. `attacker_ip` is the name DQL gives to whatever text follows that anchor. After running this query, your result table will have a new `attacker_ip` column — a clean, queryable field you can now filter, count, or group just like `loglevel` or `host`.",
+          "You saw the content field holds `attacker_ip=192.168.1.x` among other key=value pairs. The `parse` command scans each row and extracts a key=value pair into its own column. The pattern format in this simulation is `label:fieldname` — the engine searches for `fieldname=value` in the content and creates a column named `fieldname`. So `parse content, \"IP:attacker_ip\"` finds `attacker_ip=192.168.1.45` and creates an `attacker_ip` column. Note: real Dynatrace uses the richer DPGL pattern language (e.g. `LD 'attacker_ip=' STRING:attacker_ip`) — the concept is the same but the full syntax gives you more control.",
         lesson: "Extract Fields from Text with parse",
         goal: "Use parse to pull the IP address out of content into a new field called attacker_ip.",
         hint: 'parse <field>, "<literal_anchor:new_field_name>"',

@@ -73,9 +73,15 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
         }
       }
       break;
-    case "limit":
-      args.count = Number(rest) || 100;
+    case "limit": {
+      const limitArg = rest.trim();
+      const limitN = Number(limitArg);
+      if (limitArg && isNaN(limitN)) {
+        throw new Error(`'limit' expects a number, got "${limitArg}" — try: limit 10`);
+      }
+      args.count = isNaN(limitN) ? 100 : Math.max(0, Math.floor(limitN));
       break;
+    }
     case "summarize": {
       // Split by the "by:" keyword
       const byIdx = rest.search(/\bby\s*:/i);

@@ -58,8 +58,8 @@ const EXAMPLE_QUERIES = [
   },
   { label: "Most recent first", query: "fetch logs\n| sort timestamp desc\n| limit 20" },
   {
-    label: "Extract endpoint",
-    query: 'fetch logs\n| parse content, "endpoint=endpoint_name "\n| summarize count(), by:{endpoint_name}',
+    label: "Requests per endpoint",
+    query: 'fetch logs\n| parse content, "ep:endpoint"\n| summarize requests = count(), by:{endpoint}\n| sort requests desc',
   },
 ];
 
@@ -117,7 +117,7 @@ export const Sandbox = () => {
         <Flex flexDirection="column" gap={12}>
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
           <Flex gap={8} alignItems="center">
-            <Button variant="accent" onClick={() => runWithQuery(query)}>
+            <Button variant="accent" disabled={!query.trim()} onClick={() => runWithQuery(query)}>
               Run query
             </Button>
             <Button onClick={() => { setQuery(""); setOutcome(null); }}>

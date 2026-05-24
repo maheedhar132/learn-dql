@@ -57,6 +57,13 @@ export const CasePlayer = () => {
   const passed = !isDqlStep || (result?.passed ?? false);
   const isLastStep = !!scenario && stepIndex === scenario.steps.length - 1;
 
+  // Derive available fields from the step's sample data (first record keys)
+  const availableFields = useMemo(() => {
+    const first = step?.sampleData?.[0];
+    if (!first) return [];
+    return Object.keys(first);
+  }, [step]);
+
   const runWithQuery = useCallback((q: string) => {
     if (!step || !scenario) return;
     setIsExploration(false);
@@ -184,6 +191,16 @@ export const CasePlayer = () => {
               <Code>{step.referenceQuery}</Code>
             </Flex>
           )}
+          {availableFields.length > 0 && (
+            <Flex flexDirection="column" gap={6}>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
+                Available fields in this dataset:
+              </Paragraph>
+              <Flex gap={6} flexWrap="wrap">
+                {availableFields.map((f) => <Code key={f}>{f}</Code>)}
+              </Flex>
+            </Flex>
+          )}
           <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
             Free in-app simulation — learn without affecting your Dynatrace environment or incurring any charges.
           </Paragraph>
@@ -194,9 +211,9 @@ export const CasePlayer = () => {
         <>
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
           <Flex gap={8} alignItems="center">
-            <Button variant="accent" onClick={() => runWithQuery(query)}>Run query</Button>
-            <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>Fill example</Button>
-            <Button onClick={() => { setQuery(""); setResult(null); }}>Clear</Button>
+            <Button variant="accent" disabled={!query.trim()} onClick={() => runWithQuery(query)}>Run query</Button>
+            <Button onClick={() => { setQuery(pipelineToQuery(step.expectedPipeline)); setResult(null); setIsExploration(false); }}>Fill example</Button>
+            <Button onClick={() => { setQuery(""); setResult(null); setIsExploration(false); }}>Clear</Button>
             <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>Ctrl+Enter to run</Paragraph>
           </Flex>
 

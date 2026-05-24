@@ -36,8 +36,14 @@ function lastStage(pipeline: PipelineStage[], data: DQLRecord[]): RunOutcome {
 /** Execute a raw DQL string against sample data (offline engine). */
 export function runQuery(query: string, sampleData: DQLRecord[]): RunOutcome {
   const trimmed = query.trim();
-  if (!trimmed) return { records: [], columns: [], error: "Empty query" };
-  return lastStage(parsePipeline(trimmed), sampleData);
+  if (!trimmed) return { records: [], columns: [], error: "Empty query — type a DQL command to get started." };
+  let pipeline: PipelineStage[];
+  try {
+    pipeline = parsePipeline(trimmed);
+  } catch (e) {
+    return { records: [], columns: [], error: e instanceof Error ? e.message : "Query parse error" };
+  }
+  return lastStage(pipeline, sampleData);
 }
 
 /** Execute a known-good reference pipeline against sample data. */
@@ -98,10 +104,12 @@ export function validateStep(
   const expectedOutcome = runExpected(expected, sampleData);
 
   if (userOutcome.error) {
-    const syntaxHint = /=[^=]/.test(query) ? " (tip: use == for comparison)" : "";
+    let msg = userOutcome.error;
+    if (/=[^=]/.test(query) && !/==/.test(query)) msg += " — tip: use == for comparison, not =";
+    else if (msg === "Empty query — type a DQL command to get started.") msg = "Query is empty — type a DQL command first.";
     return {
       passed: false,
-      message: `Query error: ${userOutcome.error}${syntaxHint}`,
+      message: msg,
       userOutcome,
       expectedOutcome,
     };

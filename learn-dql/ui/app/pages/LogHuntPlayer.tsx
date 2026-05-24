@@ -30,14 +30,18 @@ function deriveFields(records: ReturnType<typeof runQuery>["records"]): string[]
 
 function QuerySandbox({
   sampleData,
+  onRun,
 }: {
   sampleData: ReturnType<typeof runQuery>["records"];
+  onRun?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
 
   function run() {
+    if (!query.trim()) return;
     setOutcome(runQuery(query, sampleData as Parameters<typeof runQuery>[1]));
+    onRun?.();
   }
 
   function applyModify(newQ: string) {
@@ -53,7 +57,7 @@ function QuerySandbox({
         style={{ minHeight: 100 }}
       />
       <Flex gap={8} alignItems="center">
-        <Button variant="accent" onClick={run}>
+        <Button variant="accent" disabled={!query.trim()} onClick={run}>
           Run query
         </Button>
         <Button onClick={() => { setQuery(""); setOutcome(null); }}>
@@ -112,25 +116,41 @@ function useCtrlEnter(fn: () => void) {
 
 // ─── MCQ ──────────────────────────────────────────────────────────────────────
 
-function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) {
+const MAX_ATTEMPTS = 3;
+
+function MCQPanel({
+  mcq,
+  queriesRan,
+  onSolved,
+}: {
+  mcq: LogHuntMCQ;
+  queriesRan: boolean;
+  onSolved: () => void;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const correct = submitted && selected === mcq.correctAnswer;
-  const wrong = submitted && selected !== mcq.correctAnswer;
+  const [attempts, setAttempts] = useState(0);
+  const [solved, setSolved] = useState(false);
+  const exhausted = attempts >= MAX_ATTEMPTS;
+  const locked = solved || exhausted;
 
   function submit() {
-    if (!selected) return;
-    setSubmitted(true);
-    if (selected === mcq.correctAnswer) onSolved();
+    if (!selected || locked) return;
+    if (selected === mcq.correctAnswer) {
+      setSolved(true);
+      onSolved();
+    } else {
+      setAttempts((n) => n + 1);
+      setSelected(null);
+    }
   }
 
   return (
     <Surface
       style={{
         borderLeft: `3px solid ${
-          correct
+          solved
             ? Colors.Charts.Threshold.Good.Default
-            : wrong
+            : exhausted
             ? Colors.Charts.Threshold.Bad.Default
             : "transparent"
         }`,
@@ -143,20 +163,30 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
           <Paragraph style={{ fontWeight: 600, margin: 0 }}>
             {mcq.question}
           </Paragraph>
+          {attempts > 0 && !solved && !exhausted && (
+            <Chip>{MAX_ATTEMPTS - attempts} attempt{MAX_ATTEMPTS - attempts !== 1 ? "s" : ""} left</Chip>
+          )}
         </Flex>
+
+        {!queriesRan && !solved && (
+          <MessageContainer variant="neutral">
+            <MessageContainer.Title>Investigate first</MessageContainer.Title>
+            <MessageContainer.Description>
+              Run at least one query above before submitting your verdict.
+            </MessageContainer.Description>
+          </MessageContainer>
+        )}
 
         <Flex flexDirection="column" gap={8}>
           {mcq.options.map((opt) => {
             const isSelected = selected === opt;
-            const isCorrectOpt = submitted && opt === mcq.correctAnswer;
-            const isWrongOpt =
-              submitted && isSelected && opt !== mcq.correctAnswer;
+            const showCorrect = (solved || exhausted) && opt === mcq.correctAnswer;
             return (
               <Button
                 key={opt}
                 variant="default"
                 onClick={() => {
-                  if (!submitted) setSelected(opt);
+                  if (!locked) setSelected(opt);
                 }}
                 style={{
                   justifyContent: "flex-start",
@@ -168,38 +198,56 @@ function MCQPanel({ mcq, onSolved }: { mcq: LogHuntMCQ; onSolved: () => void }) 
                     ? "rgba(127,127,127,0.15)"
                     : "transparent",
                   border: isSelected
-                    ? `1px solid ${
-                        isCorrectOpt
-                          ? Colors.Charts.Threshold.Good.Default
-                          : isWrongOpt
-                          ? Colors.Charts.Threshold.Bad.Default
-                          : "rgba(127,127,127,0.4)"
-                      }`
+                    ? `1px solid ${showCorrect ? Colors.Charts.Threshold.Good.Default : "rgba(127,127,127,0.4)"}`
+                    : showCorrect
+                    ? `1px solid ${Colors.Charts.Threshold.Good.Default}`
                     : "1px solid transparent",
-                  cursor: submitted ? "default" : "pointer",
+                  cursor: locked ? "default" : "pointer",
                   fontWeight: isSelected ? 600 : 400,
+                  background: showCorrect
+                    ? `${Colors.Charts.Threshold.Good.Default}22`
+                    : isSelected
+                    ? "rgba(127,127,127,0.15)"
+                    : "transparent",
                 }}
               >
-                {isCorrectOpt ? "✓ " : isWrongOpt ? "✗ " : ""}
-                {opt}
+                {showCorrect ? "✓ " : ""}{opt}
               </Button>
             );
           })}
         </Flex>
 
-        {!submitted && (
-          <Button variant="accent" disabled={!selected} onClick={submit}>
+        {!locked && (
+          <Button
+            variant="accent"
+            disabled={!selected || !queriesRan}
+            onClick={submit}
+          >
             Submit verdict
           </Button>
         )}
 
-        {submitted && (
-          <MessageContainer variant={correct ? "success" : "critical"}>
-            <MessageContainer.Title>
-              {correct ? "Correct verdict!" : "Wrong verdict"}
-            </MessageContainer.Title>
+        {solved && (
+          <MessageContainer variant="success">
+            <MessageContainer.Title>Correct verdict!</MessageContainer.Title>
+            <MessageContainer.Description>{mcq.explanation}</MessageContainer.Description>
+          </MessageContainer>
+        )}
+
+        {!solved && attempts > 0 && attempts < MAX_ATTEMPTS && (
+          <MessageContainer variant="warning">
+            <MessageContainer.Title>Incorrect — keep investigating</MessageContainer.Title>
             <MessageContainer.Description>
-              {mcq.explanation}
+              That wasn't the right answer. Review the data and try again — {MAX_ATTEMPTS - attempts} attempt{MAX_ATTEMPTS - attempts !== 1 ? "s" : ""} remaining.
+            </MessageContainer.Description>
+          </MessageContainer>
+        )}
+
+        {exhausted && !solved && (
+          <MessageContainer variant="critical">
+            <MessageContainer.Title>Out of attempts</MessageContainer.Title>
+            <MessageContainer.Description>
+              The correct answer was {mcq.correctAnswer}. {mcq.explanation}
             </MessageContainer.Description>
           </MessageContainer>
         )}
@@ -215,11 +263,13 @@ export const LogHuntPlayer = () => {
   const navigate = useNavigate();
   const scenario = logHuntScenarios.find((s) => s.id === huntId);
   const [caseSolved, setCaseSolved] = useState(false);
-  const [hintIndex, setHintIndex] = useState(-1); // -1 = no hints shown yet
+  const [hintIndex, setHintIndex] = useState(-1);
+  const [queriesRan, setQueriesRan] = useState(false);
 
   useEffect(() => {
     setCaseSolved(false);
     setHintIndex(-1);
+    setQueriesRan(false);
   }, [huntId]);
 
   const nextHuntIndex =
@@ -288,13 +338,14 @@ export const LogHuntPlayer = () => {
         <Divider />
 
         {/* Query sandbox */}
-        <QuerySandbox sampleData={sampleData} />
+        <QuerySandbox sampleData={sampleData} onRun={() => setQueriesRan(true)} />
 
         <Divider />
 
         {/* MCQ */}
         <MCQPanel
           mcq={scenario.mcq}
+          queriesRan={queriesRan}
           onSolved={() => {
             setCaseSolved(true);
             markHuntComplete(huntId!);

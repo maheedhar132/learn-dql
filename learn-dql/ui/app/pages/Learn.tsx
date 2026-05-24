@@ -7,7 +7,7 @@ import {
   Strong,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip } from "@dynatrace/strato-components/content";
+import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { TextInput } from "@dynatrace/strato-components/forms";
 import { ALL_SCENARIOS } from "../lib/dql";
 import { getProgress } from "../lib/progress";
@@ -99,6 +99,19 @@ export const Learn = () => {
     () => onboardingScenarios.length > 0 && onboardingScenarios.every((s) => completed.has(s.id)),
     [onboardingScenarios, completed],
   );
+  const onboardingStarted = useMemo(
+    () => onboardingScenarios.some((s) => completed.has(s.id)),
+    [onboardingScenarios, completed],
+  );
+  const onboardingDoneCount = useMemo(
+    () => onboardingScenarios.filter((s) => completed.has(s.id)).length,
+    [onboardingScenarios, completed],
+  );
+  // First incomplete onboarding scenario for "Continue" link
+  const nextOnboarding = useMemo(
+    () => onboardingScenarios.find((s) => !completed.has(s.id)),
+    [onboardingScenarios, completed],
+  );
 
   const [search, setSearch] = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState<string | null>(null);
@@ -126,22 +139,28 @@ export const Learn = () => {
         </Paragraph>
       </Flex>
 
-      {/* ── Onboarding banner ── */}
+      {/* ── Onboarding banner — hidden once complete ── */}
       {!onboardingComplete && (
         <Surface>
           <Flex padding={16} gap={16} alignItems="center" justifyContent="space-between" flexWrap="wrap">
             <Flex flexDirection="column" gap={4}>
-              <Strong>New to DQL?</Strong>
+              <Strong>
+                {onboardingStarted
+                  ? `Continue Onboarding (${onboardingDoneCount}/${onboardingScenarios.length} done)`
+                  : "New to DQL?"}
+              </Strong>
               <Paragraph style={{ margin: 0, opacity: 0.8, fontSize: "0.9rem" }}>
-                Start with the Onboarding track — 6 beginner lessons covering the core commands.
+                {onboardingStarted
+                  ? "Keep going — you're making great progress through the fundamentals."
+                  : "Start with the Onboarding track — 6 beginner lessons covering the core commands."}
               </Paragraph>
             </Flex>
             <Button
               as={RouterLink}
-              to={`/learn/${onboardingScenarios[0]?.id ?? ""}`}
+              to={`/learn/${nextOnboarding?.id ?? onboardingScenarios[0]?.id ?? ""}`}
               variant="accent"
             >
-              Start Onboarding →
+              {onboardingStarted ? "Continue →" : "Start Onboarding →"}
             </Button>
           </Flex>
         </Surface>
@@ -193,6 +212,23 @@ export const Learn = () => {
           </Button>
         )}
       </Flex>
+
+      {/* ── Empty state ── */}
+      {anyFilterActive && TRACK_ORDER.every((track) =>
+        ALL_SCENARIOS.filter((s) => (s.track ?? "dql") === track.key).filter(matchScenario).length === 0
+      ) && (
+        <MessageContainer variant="neutral">
+          <MessageContainer.Title>No lessons match</MessageContainer.Title>
+          <MessageContainer.Description>
+            Try a different search term or clear the filters to see all lessons.
+          </MessageContainer.Description>
+          <MessageContainer.Actions>
+            <Button onClick={() => { setSearch(""); setFilterDifficulty(null); setFilterStatus("all"); }}>
+              Clear filters
+            </Button>
+          </MessageContainer.Actions>
+        </MessageContainer>
+      )}
 
       {/* ── Tracks ── */}
       {TRACK_ORDER.map((track) => {
