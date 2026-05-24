@@ -190,10 +190,8 @@ function MCQPanel({
                 }}
                 style={{
                   justifyContent: "flex-start",
-                  background: isCorrectOpt
+                  background: showCorrect
                     ? `${Colors.Charts.Threshold.Good.Default}22`
-                    : isWrongOpt
-                    ? `${Colors.Charts.Threshold.Bad.Default}22`
                     : isSelected
                     ? "rgba(127,127,127,0.15)"
                     : "transparent",
@@ -204,11 +202,6 @@ function MCQPanel({
                     : "1px solid transparent",
                   cursor: locked ? "default" : "pointer",
                   fontWeight: isSelected ? 600 : 400,
-                  background: showCorrect
-                    ? `${Colors.Charts.Threshold.Good.Default}22`
-                    : isSelected
-                    ? "rgba(127,127,127,0.15)"
-                    : "transparent",
                 }}
               >
                 {showCorrect ? "✓ " : ""}{opt}
