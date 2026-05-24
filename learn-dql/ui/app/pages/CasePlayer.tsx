@@ -196,6 +196,7 @@ export const CasePlayer = () => {
           <Flex gap={8} alignItems="center">
             <Button variant="accent" onClick={() => runWithQuery(query)}>Run query</Button>
             <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>Fill example</Button>
+            <Button onClick={() => { setQuery(""); setResult(null); }}>Clear</Button>
             <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>Ctrl+Enter to run</Paragraph>
           </Flex>
 

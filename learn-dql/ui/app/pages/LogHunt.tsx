@@ -46,14 +46,10 @@ export const LogHunt = () => {
                   </Flex>
                 </Flex>
 
-                <Paragraph style={{ flexGrow: 1 }}>
-                  {scenario.story.length > 200
-                    ? `${scenario.story.slice(0, 200)}…`
+                <Paragraph style={{ flexGrow: 1, fontSize: "0.85rem", lineHeight: 1.5 }}>
+                  {scenario.story.length > 160
+                    ? `${scenario.story.slice(0, 160)}…`
                     : scenario.story}
-                </Paragraph>
-
-                <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6 }}>
-                  Open investigation
                 </Paragraph>
 
                 <Button
