@@ -361,7 +361,7 @@ export const LogHuntPlayer = () => {
         <Surface>
           <Flex flexDirection="column" padding={16} gap={12}>
             <Strong>Investigation tasks</Strong>
-            <Flex flexDirection="column" gap={10}>
+            <Flex flexDirection="column" gap={12}>
               {scenario.tasks.map((task, i) => (
                 <Flex key={task.id} flexDirection="column" gap={4}>
                   <Paragraph style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>

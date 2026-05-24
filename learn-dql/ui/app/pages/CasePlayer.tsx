@@ -270,7 +270,7 @@ export const CasePlayer = () => {
               {/* ── Next lesson callout on last step pass ── */}
               {isSuccess && isLastStep && nextScenario && (
                 <Surface>
-                  <Flex flexDirection="column" padding={16} gap={10} alignItems="flex-start">
+                  <Flex flexDirection="column" padding={16} gap={12} alignItems="flex-start">
                     <Chip color="success">Lesson complete</Chip>
                     <Heading level={3} style={{ margin: 0 }}>Up next: {nextScenario.title}</Heading>
                     <Paragraph style={{ opacity: 0.8, margin: 0 }}>{nextScenario.briefing}</Paragraph>

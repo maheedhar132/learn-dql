@@ -72,7 +72,7 @@ export const Home = () => {
           const color = pct === 100 ? "success" : pct > 0 ? "primary" : "neutral";
           return (
             <Surface key={label}>
-              <Flex flexDirection="column" padding={20} gap={10}>
+              <Flex flexDirection="column" padding={20} gap={12}>
                 <Flex justifyContent="space-between" alignItems="baseline">
                   <Strong>{label}</Strong>
                   <Paragraph style={{ fontSize: "0.8rem", opacity: 0.7, margin: 0 }}>
