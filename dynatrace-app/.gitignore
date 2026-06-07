@@ -1,7 +1,0 @@
-node_modules/
-dist/
-.dt/
-*.local
-.env
-.env.*
-*.tsbuildinfo

@@ -1,49 +1,121 @@
-# Getting Started with your Dynatrace App
+# learn-dql app
 
-This project was bootstrapped with Dynatrace App Toolkit.
+Interactive DQL/DPL learning app built on Dynatrace AppEngine. Teaches Dynatrace Query Language through guided lessons, a sandbox, and Log Hunt investigation scenarios — all running offline in the browser.
 
-It uses React in combination with TypeScript, to provide great developer experience.
+---
 
-## Available Scripts
+## Prerequisites
 
-In the project directory, you can run:
+- Node.js ≥ 16.13.0
+- A Dynatrace environment with AppEngine enabled (required for deployment; local dev works without it)
+- `dt-app` CLI — installed automatically as a dev dependency
 
-### `npm run start`
+---
 
-Runs the app in the development mode. A new browser window with your running app will be automatically opened.
+## Quick start
 
-Edit a component file in `ui` and save it. The page will reload when you make changes. You may also see any errors in the console.
+```bash
+npm install
+npm run start        # starts dt-app dev server
+```
 
-### `npm run build`
+The dev server (`dt-app dev`) opens a browser tab connected to the environment in `app.config.json`. Edit any file under `ui/` and the page hot-reloads.
 
-Builds the app for production to the `dist` folder. It correctly bundles your app in production mode and optimizes the build for the best performance.
+---
 
-### `npm run deploy`
+## Scripts
 
-Builds the app and deploys it to the specified environment in `app.config.json`.
+| Command | Underlying call | Purpose |
+|---|---|---|
+| `npm run start` | `dt-app dev` | Local development server with hot reload |
+| `npm run build` | `dt-app build` | Production build → `dist/` |
+| `npm run deploy` | `dt-app deploy` | Build + upload to target environment |
+| `npm run uninstall` | `dt-app uninstall` | Remove app from target environment |
+| `npm run lint` | `eslint .` | Lint the project |
+| `npm run update` | `dt-app update` | Upgrade `@dynatrace-scoped` packages |
+| `npm run info` | `dt-app info` | Show CLI + environment versions |
+| `npm run help` | `dt-app help` | List all dt-app commands |
 
-### `npm run uninstall
+> This repository is **dev-only**. `deploy` and `uninstall` should not be run against production environments.
 
-Uninstalls the app from the specified environment in `app.config.json`.
+---
 
-### `npm run generate:function`
+## App manifest
 
-Generates a new serverless function for your app in the `api` folder.
+`app.config.json` controls the app identity and target environment:
 
-### `npm run update`
+```json
+{
+  "environmentUrl": "https://<your-env>.apps.dynatrace.com/",
+  "app": {
+    "name": "learn-dql",
+    "version": "0.0.0",
+    "id": "my.learn.dql",
+    "scopes": [
+      { "name": "storage:logs:read" },
+      { "name": "storage:buckets:read" }
+    ]
+  }
+}
+```
 
-Updates @dynatrace-scoped packages to the latest version and applies automatic migrations.
+Change `environmentUrl` and `app.id` before deploying to a different environment.
 
-### `npm run info`
+---
 
-Outputs the CLI and environment information.
+## Project structure
 
-### `npm run help`
+```
+ui/
+└── app/
+    ├── App.tsx              # Route definitions
+    ├── index.tsx            # Entry point
+    ├── components/
+    │   ├── AppShell.tsx     # Top nav + layout wrapper
+    │   └── ResultTable.tsx  # Query result renderer with column actions
+    ├── pages/
+    │   ├── Home.tsx         # Progress overview + resume/hunt widgets
+    │   ├── Learn.tsx        # Lesson catalogue with filters
+    │   ├── CasePlayer.tsx   # Step-by-step lesson player
+    │   ├── Sandbox.tsx      # Free-form DQL editor (2,200 sample records)
+    │   ├── LogHunt.tsx      # Investigation scenario list
+    │   └── LogHuntPlayer.tsx# Hunt player with sandbox + MCQ verdict
+    └── lib/
+        ├── dql/
+        │   ├── parser.ts                # DQL text → pipeline stages
+        │   ├── commands.ts              # Command executors (fetch, filter, summarize, …)
+        │   ├── engine.ts                # runPipeline orchestrator
+        │   ├── log-generator.ts         # Deterministic seeded sample data
+        │   ├── scenarios.ts             # Core DQL lesson scenarios
+        │   ├── scenarios-onboarding.ts  # 6 beginner onboarding lessons
+        │   ├── scenarios-combined.ts    # Combined scenario export
+        │   └── log-hunt-scenarios.ts    # 10 Log Hunt investigation scenarios
+        ├── dpl/
+        │   ├── parser.ts    # DPL pattern → RegExp
+        │   └── matchers.ts  # Matcher registry
+        ├── types/
+        │   └── dql.ts       # Scenario, Step, PipelineStage, … types
+        ├── validate.ts      # Result-based query validation + error diagnosis
+        └── progress.ts      # localStorage progress (completedCases, completedHunts)
+```
 
-Outputs help for the Dynatrace App Toolkit.
+---
 
-## Learn more
+## How the offline engine works
 
-You can find more information on how to use all the features of the new Dynatrace Platform in [Dynatrace Developer](https://dt-url.net/developers).
+All query execution runs in the browser against deterministic in-memory data — no live Grail queries.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+1. `parsePipeline(query)` → `PipelineStage[]`
+2. `runPipeline(stages, sampleData)` → `{ records, columns }`
+3. `validateStep(userQuery, expectedPipeline, sampleData)` compares the user's result records to the expected result — not exact syntax. Multiple valid queries can pass the same step.
+
+Progress is persisted in `localStorage` under the key `learn-dql.progress.v1`.
+
+---
+
+## References
+
+- [Dynatrace App Toolkit quickstart](https://developer.dynatrace.com/quickstart/app-toolkit/)
+- [Strato UI components](https://developer.dynatrace.com/develop/ui-components/)
+- [DQL reference](https://docs.dynatrace.com/docs/discover-dynatrace/references/dynatrace-query-language)
+- [Dynatrace Developer Portal](https://developer.dynatrace.com/)
