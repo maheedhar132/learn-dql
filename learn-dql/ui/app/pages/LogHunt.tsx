@@ -1,19 +1,31 @@
-import React, { useMemo } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
-  Link,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Chip } from "@dynatrace/strato-components/content";
 import { logHuntScenarios } from "../lib/dql/log-hunt-scenarios";
 import { getProgress } from "../lib/progress";
 
+const DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"] as const;
+
 export const LogHunt = () => {
   const navigate = useNavigate();
   const completedHunts = useMemo(() => new Set(getProgress().completedHunts), []);
+  const [filterDifficulty, setFilterDifficulty] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"all" | "done" | "todo">("all");
+
+  const visibleScenarios = useMemo(() => {
+    return logHuntScenarios.filter((s) => {
+      if (filterDifficulty && s.difficulty !== filterDifficulty) return false;
+      if (filterStatus === "done" && !completedHunts.has(s.id)) return false;
+      if (filterStatus === "todo" && completedHunts.has(s.id)) return false;
+      return true;
+    });
+  }, [filterDifficulty, filterStatus, completedHunts]);
 
   return (
     <Flex flexDirection="column" padding={32} gap={24}>
@@ -30,8 +42,43 @@ export const LogHunt = () => {
 
       <Divider />
 
+      {/* ── Filters ── */}
+      <Flex gap={12} alignItems="center" flexWrap="wrap">
+        <Flex gap={6}>
+          {DIFFICULTIES.map((d) => (
+            <Button
+              key={d}
+              variant={filterDifficulty === d ? "accent" : "default"}
+              onClick={() => setFilterDifficulty(filterDifficulty === d ? null : d)}
+            >
+              {d}
+            </Button>
+          ))}
+        </Flex>
+        <Flex gap={6}>
+          {(["all", "todo", "done"] as const).map((s) => (
+            <Button
+              key={s}
+              variant={filterStatus === s ? "accent" : "default"}
+              onClick={() => setFilterStatus(s)}
+            >
+              {s === "all" ? "All" : s === "todo" ? "Unsolved" : "Solved"}
+            </Button>
+          ))}
+        </Flex>
+        {(filterDifficulty || filterStatus !== "all") && (
+          <Button variant="default" onClick={() => { setFilterDifficulty(null); setFilterStatus("all"); }}>
+            Clear filters
+          </Button>
+        )}
+      </Flex>
+
+      {visibleScenarios.length === 0 && (
+        <Paragraph style={{ opacity: 0.6 }}>No hunts match the current filters.</Paragraph>
+      )}
+
       <Grid gridTemplateColumns="repeat(3, 1fr)" gap={20}>
-        {logHuntScenarios.map((scenario) => {
+        {visibleScenarios.map((scenario) => {
           const done = completedHunts.has(scenario.id);
           return (
             <Surface key={scenario.id}>

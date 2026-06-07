@@ -188,7 +188,8 @@ function computeAgg(aggregation: string, aggField: string, rows: DQLRecord[], co
     return s.length % 2 !== 0 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
   if (aggregation === "percentile") return nums.length > 0 ? nums.sort((a, b) => a - b)[Math.floor(nums.length * 0.95)] : 0;
-  if (aggregation === "countDistinct") return new Set(rows.map((r) => r[aggField])).size;
+  if (aggregation === "countdistinct") return new Set(rows.map((r) => r[aggField])).size;
+  if (aggregation === "countif") return rows.filter((r) => evaluateCondition(aggField, r)).length;
   return 0;
 }
 

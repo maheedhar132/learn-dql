@@ -774,7 +774,7 @@ export const logHuntScenarios: LogHuntScenario[] = [
       {
         id: "t1",
         question: "How many requests returned HTTP 418? What does the breakdown by status code look like?",
-        solution: "fetch logs | summarize count(), by:{http_status} | sort count() desc",
+        solution: "fetch logs | summarize count(), by:{http_status} | sort count desc",
         sampleData: riddlerData,
       },
       {
@@ -899,6 +899,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "Marco has a dramatically higher VOID count than any other barista, and his VOIDs consistently appear " +
         "immediately after PAYMENT events for the same order ID. The other baristas' void rates are under 5%.",
     },
+    hints: [
+      'Run: fetch logs | summarize count(), by:{action} — note how many ORDER, PAYMENT, and VOID events exist.',
+      'Filter for VOIDs per barista: fetch logs | filter action == "VOID" | summarize voids = count(), by:{barista} | sort voids desc',
+      'Compare ORDER vs VOID counts side-by-side: fetch logs | summarize orders = countIf(action == "ORDER"), voids = countIf(action == "VOID"), by:{barista}',
+    ],
   },
 
   {
@@ -919,13 +924,13 @@ export const logHuntScenarios: LogHuntScenario[] = [
       {
         id: "t1",
         question: "How many unauthorized dispenses (authorized == false) does each staff member have?",
-        solution: "fetch logs | filter authorized == false | summarize count(), by:{dispensed_by} | sort count() desc",
+        solution: "fetch logs | filter authorized == false | summarize count(), by:{dispensed_by} | sort count desc",
         sampleData: hospitalData,
       },
       {
         id: "t2",
         question: "For unauthorized dispenses, which patient IDs appear and how often?",
-        solution: "fetch logs | filter authorized == false | summarize count(), by:{patient_id} | sort count() desc",
+        solution: "fetch logs | filter authorized == false | summarize count(), by:{patient_id} | sort count desc",
         sampleData: hospitalData,
       },
       {
@@ -944,6 +949,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "fake patient IDs (PT-9999, PT-0000, PT-8888, PT-7777) that do not appear in authorized transactions. " +
         "The total quantity diverted is far above what any accidental error would explain.",
     },
+    hints: [
+      'Run: fetch logs | filter authorized == false | summarize count(), by:{dispensed_by} | sort count desc — who has the most unauthorized dispenses?',
+      'Check patient IDs in unauthorized events: fetch logs | filter authorized == false | summarize count(), by:{patient_id} — a small repeating set is a red flag.',
+      'Quantify the diversion: fetch logs | filter authorized == false | summarize total_qty = sum(quantity), by:{dispensed_by} | sort total_qty desc',
+    ],
   },
 
   {
@@ -989,6 +999,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "He scans bags at check-in then offloads them citing 'oversized_check' — but the bags never reappear on any manifest. " +
         "Other handlers show SCAN and LOAD counts that are roughly equal.",
     },
+    hints: [
+      'Run: fetch logs | summarize count(), by:{handler, action} to see SCAN, LOAD, and OFFLOAD counts for every handler.',
+      'Filter to OFFLOAD events: fetch logs | filter action == "OFFLOAD" | summarize offloads = count(), by:{handler} | sort offloads desc — who has the most?',
+      'Pull all events for the handler with the highest OFFLOAD count, sorted by timestamp, to see the full sequence.',
+    ],
   },
 
   {
@@ -1034,6 +1049,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "customer IDs (CUST-00001, CUST-00002, CUST-00003) that appear on no other worker's records. " +
         "Legitimate refund patterns show a wide spread of customer IDs.",
     },
+    hints: [
+      'Start with: fetch logs | filter action == "REFUND" | summarize total_refunded = sum(refund_amount), by:{worker} | sort total_refunded desc',
+      'For the top worker by refund total, check how many distinct customer IDs received refunds — a low count means the money is going to a few accounts.',
+      'Filter to REFUND events for the top worker and list customer_id values to find the repeating cluster.',
+    ],
   },
 
   {
@@ -1080,6 +1100,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "The other technicians show only MAINTENANCE, REPLENISH, and AUDIT events. " +
         "Holt's visits to affected machines directly preceded the fraud complaints.",
     },
+    hints: [
+      'Start with: fetch logs | filter action == "TAMPER_SUSPECTED" | summarize tamper_count = count(), by:{technician} | sort tamper_count desc',
+      'Check which ATM IDs and locations have TAMPER_SUSPECTED events: fetch logs | filter action == "TAMPER_SUSPECTED" | fields atm_id, technician, location',
+      'See the full action breakdown per technician: fetch logs | summarize count(), by:{technician, action} | sort technician asc',
+    ],
   },
 
   {
@@ -1112,7 +1137,7 @@ export const logHuntScenarios: LogHuntScenario[] = [
       {
         id: "t3",
         question: "For VOID events only, what is the breakdown by floor and shift?",
-        solution: 'fetch logs | filter action == "VOID" | summarize count(), by:{floor, shift} | sort count() desc',
+        solution: 'fetch logs | filter action == "VOID" | summarize count(), by:{floor, shift} | sort count desc',
         sampleData: minibarData,
       },
     ],
@@ -1124,6 +1149,11 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "Kowalski has a VOID count many times higher than any other staff member, while his GUEST_CONSUME count is " +
         "comparatively low. The other staff members show a normal pattern of mostly RESTOCK and GUEST_CONSUME events with rare VOIDs.",
     },
+    hints: [
+      'Run: fetch logs | summarize count(), by:{staff_member, action} to compare RESTOCK, GUEST_CONSUME, and VOID counts per person.',
+      'Filter to VOIDs only: fetch logs | filter action == "VOID" | summarize voids = count(), by:{staff_member} | sort voids desc',
+      'Look at VOID distribution by floor and shift: fetch logs | filter action == "VOID" | summarize count(), by:{floor, shift} | sort count desc',
+    ],
   },
 
   {
@@ -1170,5 +1200,10 @@ export const logHuntScenarios: LogHuntScenario[] = [
         "expected values, creating a large cumulative kWh gap. The other operators show normal deviations within 10% " +
         "of expected, with almost no ADJUSTED or TAMPER_FLAG events.",
     },
+    hints: [
+      'Count flagged events per operator: fetch logs | summarize adjusted = countIf(action == "ADJUSTED"), tamper = countIf(action == "TAMPER_FLAG"), by:{operator} | sort tamper desc',
+      'Quantify the theft: fetch logs | filter action != "NORMAL" | summarize total_gap = sum(expected_kwh), total_read = sum(reading_kwh), by:{operator} | sort total_gap desc',
+      'Drill into the top operator\'s TAMPER_FLAG entries: fetch logs | filter action == "TAMPER_FLAG" | filter operator == "<top_name>" | fields substation_id, meter_id, reading_kwh, expected_kwh',
+    ],
   },
 ];

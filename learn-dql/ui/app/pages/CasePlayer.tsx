@@ -207,6 +207,15 @@ export const CasePlayer = () => {
         </Flex>
       </Surface>
 
+      {!isDqlStep && !isDplStep && (
+        <MessageContainer variant="neutral">
+          <MessageContainer.Title>Concept step</MessageContainer.Title>
+          <MessageContainer.Description>
+            Read through the material above, then click Next step to continue.
+          </MessageContainer.Description>
+        </MessageContainer>
+      )}
+
       {isDqlStep ? (
         <>
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
