@@ -14,7 +14,7 @@
       { "name": "storage:bizevents:read", "comment": "Read business events" },
       { "name": "storage:metrics:read", "comment": "Read metrics for timeseries queries" },
       { "name": "storage:system:read", "comment": "Read dt.system.* tables (query executions, deployments)" },
-      { "name": "entity:read", "comment": "Read entity model for lookup/join scenarios and dt.entity.* queries" }
+      { "name": "storage:entities:read", "comment": "Read entity model for lookup/join scenarios and dt.entity.* queries" }
     ]
   }
 }
