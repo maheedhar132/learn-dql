@@ -773,3 +773,322 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
   }
   return records;
 }
+
+// ─── Kubernetes Structured Logs ──────────────────────────────────────────────
+// Proper top-level fields (not buried in content) — realistic for DT ingestion.
+export function generateKubernetesStructuredLogs(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-10T06:00:00Z");
+
+  const namespaces = ["production", "staging", "monitoring", "data-pipeline", "ingress-nginx", "kube-system"];
+  const deployments = [
+    { name: "api-gateway", namespace: "production" },
+    { name: "user-service", namespace: "production" },
+    { name: "order-processor", namespace: "production" },
+    { name: "payment-service", namespace: "production" },
+    { name: "notification-worker", namespace: "production" },
+    { name: "cache-redis", namespace: "production" },
+    { name: "feature-flags", namespace: "staging" },
+    { name: "grafana", namespace: "monitoring" },
+    { name: "prometheus", namespace: "monitoring" },
+    { name: "kafka-broker", namespace: "data-pipeline" },
+    { name: "nginx-controller", namespace: "ingress-nginx" },
+    { name: "coredns", namespace: "kube-system" },
+  ];
+  const nodes = ["node-01", "node-02", "node-03", "node-04", "node-05"];
+  const reasons = ["OOMKilling", "CrashLoopBackOff", "ImagePullBackOff", "Evicted", "Scheduled",
+                   "Pulled", "Started", "Killing", "BackOff", "FailedMount", "NodeNotReady"];
+  const phases = ["Running", "Running", "Running", "Running", "Pending", "Failed", "Succeeded", "CrashLoopBackOff"];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 2, 30);
+    const dep = randItem(rng, deployments);
+    const podSuffix = `${randInt(rng, 10000, 99999)}-${randInt(rng, 10000, 99999).toString(36)}`;
+    const isError = rng() < 0.15;
+    const isWarn = !isError && rng() < 0.12;
+    const phase = isError ? randItem(rng, ["CrashLoopBackOff", "Failed", "Pending"]) : "Running";
+    const reason = isError ? randItem(rng, ["OOMKilling", "CrashLoopBackOff", "BackOff", "FailedMount"]) :
+                   isWarn  ? randItem(rng, ["Pulling", "NodeNotReady"]) :
+                              randItem(rng, ["Scheduled", "Pulled", "Started"]);
+    const restartCount = isError ? randInt(rng, 3, 25) : randInt(rng, 0, 2);
+    const cpuLimit = randItem(rng, ["250m", "500m", "1000m", "2000m"]);
+    const memLimit = randItem(rng, ["256Mi", "512Mi", "1Gi", "2Gi"]);
+    const cpuUsagePct = isError ? randInt(rng, 80, 99) : randInt(rng, 10, 70);
+    const memUsagePct = reason === "OOMKilling" ? randInt(rng, 95, 100) : randInt(rng, 20, 80);
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      loglevel: isError ? "ERROR" : isWarn ? "WARN" : "INFO",
+      namespace: dep.namespace,
+      deployment: dep.name,
+      pod: `${dep.name}-${podSuffix}`,
+      container: dep.name,
+      node: randItem(rng, nodes),
+      phase,
+      reason,
+      restart_count: restartCount,
+      cpu_limit: cpuLimit,
+      mem_limit: memLimit,
+      cpu_usage_pct: cpuUsagePct,
+      mem_usage_pct: memUsagePct,
+      content: `[${phase}] ${reason}: pod=${dep.name}-${podSuffix} namespace=${dep.namespace} restarts=${restartCount}`,
+    });
+  }
+  return records;
+}
+
+// ─── Audit Trail Logs ────────────────────────────────────────────────────────
+// User actions, permission changes, data access — the security/compliance view.
+export function generateAuditLogs(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-01T09:00:00Z");
+
+  const users = ["alice.chen", "bob.smith", "carlos.diaz", "diana.ross", "evan.patel",
+                 "fiona.kim", "george.wu", "hannah.jones", "ibrahim.al", "julia.berg"];
+  const teams = ["platform-eng", "security", "data-engineering", "sre", "devops", "backend", "product"];
+  const actions = [
+    "login", "login", "login", "login",
+    "logout",
+    "view_dashboard", "view_dashboard",
+    "run_query", "run_query", "run_query",
+    "export_data",
+    "modify_alert",
+    "delete_dashboard",
+    "create_api_key",
+    "revoke_api_key",
+    "change_permission",
+    "sudo_escalate",
+    "read_secrets",
+    "bulk_delete",
+    "api_access",
+  ];
+  const resources = ["dashboard:prod-overview", "alert:high-error-rate", "token:svc-account-01",
+                     "bucket:application-logs", "policy:admin-group", "secret:db-password",
+                     "dashboard:security-ops", "query:audit-report", "notebook:incident-2024-03"];
+  const outcomes = ["success", "success", "success", "success", "success", "failure", "denied"];
+  const ips = Array.from({ length: 15 }, () => {
+    const a = randInt(rng, 10, 192);
+    return `${a}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`;
+  });
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 5, 120);
+    const user = randItem(rng, users);
+    const action = randItem(rng, actions);
+    const resource = randItem(rng, resources);
+    const outcome = action === "sudo_escalate" || action === "read_secrets" || action === "bulk_delete"
+      ? (rng() < 0.4 ? "denied" : "success")
+      : randItem(rng, outcomes);
+    const isSuspicious = action === "sudo_escalate" || action === "bulk_delete" || (action === "read_secrets" && outcome === "success");
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      loglevel: outcome === "denied" ? "WARN" : isSuspicious ? "WARN" : "INFO",
+      user,
+      team: randItem(rng, teams),
+      action,
+      resource,
+      outcome,
+      ip: randItem(rng, ips),
+      session_id: `sess-${randInt(rng, 10000, 99999)}`,
+      duration_ms: randInt(rng, 5, 400),
+      content: `user=${user} action=${action} resource=${resource} outcome=${outcome}`,
+    });
+  }
+  return records;
+}
+
+// ─── Security Events ─────────────────────────────────────────────────────────
+// Threat detection, anomaly rules, MITRE ATT&CK mapped events.
+export function generateSecurityEvents(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-15T00:00:00Z");
+
+  const rules = [
+    { name: "Brute Force Login",         severity: "HIGH",     tactic: "Credential Access",   technique: "T1110" },
+    { name: "Port Scan Detected",        severity: "MEDIUM",   tactic: "Discovery",            technique: "T1046" },
+    { name: "Lateral Movement SSH",      severity: "CRITICAL", tactic: "Lateral Movement",     technique: "T1021" },
+    { name: "Data Exfiltration DNS",     severity: "HIGH",     tactic: "Exfiltration",         technique: "T1048" },
+    { name: "Privilege Escalation sudo", severity: "HIGH",     tactic: "Privilege Escalation", technique: "T1548" },
+    { name: "Suspicious Cron Job",       severity: "MEDIUM",   tactic: "Persistence",          technique: "T1053" },
+    { name: "Reverse Shell",             severity: "CRITICAL", tactic: "Execution",            technique: "T1059" },
+    { name: "Log Tampering",             severity: "HIGH",     tactic: "Defense Evasion",      technique: "T1070" },
+    { name: "Anomalous API Call",        severity: "LOW",      tactic: "Discovery",            technique: "T1526" },
+    { name: "Container Escape",          severity: "CRITICAL", tactic: "Privilege Escalation", technique: "T1611" },
+  ];
+  const actions = ["blocked", "blocked", "blocked", "alert", "alert", "allowed"];
+  const protocols = ["TCP", "UDP", "HTTP", "HTTPS", "SSH", "DNS", "ICMP"];
+  const destPorts = [22, 80, 443, 3306, 5432, 6379, 8080, 8443, 27017];
+
+  const internalIps = Array.from({ length: 20 }, () =>
+    `10.${randInt(rng, 0, 5)}.${randInt(rng, 1, 254)}.${randInt(rng, 1, 254)}`);
+  const externalIps = Array.from({ length: 30 }, () =>
+    `${randInt(rng, 1, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
+  const hosts = ["app-01", "app-02", "db-primary", "db-replica", "cache-01", "worker-01", "worker-02"];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 1, 180);
+    const rule = randItem(rng, rules);
+    const action = randItem(rng, actions);
+    const src_ip = rng() < 0.3 ? randItem(rng, externalIps) : randItem(rng, internalIps);
+    const dest_ip = randItem(rng, internalIps);
+    const dest_port = randItem(rng, destPorts);
+    const protocol = randItem(rng, protocols);
+    const host = randItem(rng, hosts);
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      loglevel: rule.severity === "CRITICAL" ? "ERROR" : rule.severity === "HIGH" ? "WARN" : "INFO",
+      severity: rule.severity,
+      rule_name: rule.name,
+      mitre_tactic: rule.tactic,
+      mitre_technique: rule.technique,
+      src_ip,
+      dest_ip,
+      dest_port,
+      protocol,
+      action,
+      host,
+      event_count: randInt(rng, 1, 150),
+      content: `rule="${rule.name}" src=${src_ip} dest=${dest_ip}:${dest_port} action=${action} severity=${rule.severity}`,
+    });
+  }
+  return records;
+}
+
+// ─── Infrastructure / Host Metrics (as log-style records) ────────────────────
+// Periodic host health snapshots — CPU, memory, disk, network per service.
+export function generateInfrastructureLogs(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-20T08:00:00Z");
+
+  const hosts = [
+    { name: "prod-app-01",   role: "web",      region: "us-east-1", az: "us-east-1a" },
+    { name: "prod-app-02",   role: "web",      region: "us-east-1", az: "us-east-1b" },
+    { name: "prod-app-03",   role: "web",      region: "us-west-2", az: "us-west-2a" },
+    { name: "prod-db-01",    role: "database", region: "us-east-1", az: "us-east-1a" },
+    { name: "prod-db-02",    role: "database", region: "us-east-1", az: "us-east-1b" },
+    { name: "prod-cache-01", role: "cache",    region: "us-east-1", az: "us-east-1a" },
+    { name: "prod-worker-01",role: "worker",   region: "us-east-1", az: "us-east-1a" },
+    { name: "prod-worker-02",role: "worker",   region: "us-west-2", az: "us-west-2b" },
+    { name: "prod-k8s-01",   role: "k8s-node", region: "us-east-1", az: "us-east-1a" },
+    { name: "prod-k8s-02",   role: "k8s-node", region: "us-east-1", az: "us-east-1b" },
+  ];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 55, 65); // ~1 min polling interval
+    const host = randItem(rng, hosts);
+    const isStressed = rng() < 0.1;
+    const cpu_pct = isStressed ? randInt(rng, 85, 99) : randInt(rng, 10, 65);
+    const mem_used_gb = parseFloat((randInt(rng, 2, isStressed ? 31 : 24) + rng()).toFixed(1));
+    const mem_total_gb = 32;
+    const mem_pct = Math.round((mem_used_gb / mem_total_gb) * 100);
+    const disk_pct = randInt(rng, 20, isStressed ? 92 : 75);
+    const net_rx_mbps = parseFloat((randInt(rng, 0, 800) + rng()).toFixed(1));
+    const net_tx_mbps = parseFloat((randInt(rng, 0, 400) + rng()).toFixed(1));
+    const process_count = randInt(rng, 80, 350);
+    const load_avg = parseFloat((cpu_pct / 100 * randInt(rng, 4, 16) + rng()).toFixed(2));
+
+    const loglevel = cpu_pct > 90 || mem_pct > 90 || disk_pct > 85 ? "WARN" : "INFO";
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      loglevel,
+      host: host.name,
+      role: host.role,
+      region: host.region,
+      availability_zone: host.az,
+      cpu_pct,
+      mem_used_gb,
+      mem_total_gb,
+      mem_pct,
+      disk_pct,
+      net_rx_mbps,
+      net_tx_mbps,
+      process_count,
+      load_avg,
+      content: `host=${host.name} cpu=${cpu_pct}% mem=${mem_pct}% disk=${disk_pct}% load=${load_avg}`,
+    });
+  }
+  return records;
+}
+
+// ─── APM Spans / Distributed Traces ──────────────────────────────────────────
+// Service-to-service calls with duration, status, errors, DB statements.
+export function generateApmSpans(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-18T10:00:00Z");
+
+  const services = ["api-gateway", "user-service", "order-service", "payment-service",
+                    "inventory-service", "notification-service", "shipping-service", "search-service"];
+  const operations = {
+    "api-gateway":           ["handle_request", "auth_check", "rate_limit", "route_request"],
+    "user-service":          ["get_user", "update_user", "create_session", "validate_token"],
+    "order-service":         ["create_order", "get_order", "list_orders", "cancel_order"],
+    "payment-service":       ["charge_card", "refund", "validate_card", "get_balance"],
+    "inventory-service":     ["check_stock", "reserve_item", "release_item", "update_stock"],
+    "notification-service":  ["send_email", "send_sms", "push_notification", "queue_message"],
+    "shipping-service":      ["calculate_rate", "create_shipment", "track_package", "update_address"],
+    "search-service":        ["search_products", "index_product", "suggest_autocomplete", "filter_results"],
+  };
+  const dbStatements = [
+    "SELECT * FROM users WHERE id = ?",
+    "INSERT INTO orders VALUES (?)",
+    "UPDATE inventory SET quantity = ? WHERE sku = ?",
+    "SELECT o.id, o.total FROM orders o JOIN users u ON o.user_id = u.id WHERE u.email = ?",
+    "DELETE FROM sessions WHERE expires_at < NOW()",
+    "SELECT COUNT(*) FROM events WHERE created_at > ?",
+  ];
+  const spanTypes = ["http", "db", "cache", "messaging", "internal"];
+  const statusCodes = [200, 200, 200, 200, 200, 201, 204, 400, 401, 404, 429, 500, 502, 503];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 1, 8);
+    const service = randItem(rng, services) as keyof typeof operations;
+    const operation = randItem(rng, operations[service]);
+    const spanType = randItem(rng, spanTypes);
+    const statusCode = randItem(rng, statusCodes);
+    const isError = statusCode >= 500;
+    const isSlow = !isError && rng() < 0.08;
+    const duration_ms = isError ? randInt(rng, 100, 5000) :
+                        isSlow  ? randInt(rng, 800, 3000) :
+                                  randInt(rng, 2, 300);
+    const traceId = `${randInt(rng, 0x10000000, 0xffffffff).toString(16)}${randInt(rng, 0x10000000, 0xffffffff).toString(16)}`;
+    const spanId = randInt(rng, 0x10000000, 0xffffffff).toString(16);
+    const hasDbCall = spanType === "db";
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      loglevel: isError ? "ERROR" : isSlow ? "WARN" : "INFO",
+      trace_id: traceId,
+      span_id: spanId,
+      service,
+      operation,
+      span_type: spanType,
+      duration_ms,
+      status_code: statusCode,
+      is_error: isError,
+      db_statement: hasDbCall ? randItem(rng, dbStatements) : null,
+      caller_service: randItem(rng, services),
+      host: `${service}-pod-${randInt(rng, 1, 4)}`,
+      content: `service=${service} operation=${operation} duration_ms=${duration_ms} status=${statusCode}`,
+    });
+  }
+  return records;
+}
+

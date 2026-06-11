@@ -16,6 +16,9 @@ export const Header = () => {
         <AppHeader.NavItem as={Link} to="/log-hunt">
           Log Hunt
         </AppHeader.NavItem>
+        <AppHeader.NavItem as={Link} to="/notebook">
+          Notebook
+        </AppHeader.NavItem>
       </AppHeader.NavItems>
     </AppHeader>
   );

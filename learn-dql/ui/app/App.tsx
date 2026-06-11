@@ -8,6 +8,7 @@ import { CasePlayer } from "./pages/CasePlayer";
 import { Sandbox } from "./pages/Sandbox";
 import { LogHunt } from "./pages/LogHunt";
 import { LogHuntPlayer } from "./pages/LogHuntPlayer";
+import { Notebook } from "./pages/Notebook";
 
 export const App = () => {
   return (
@@ -23,6 +24,7 @@ export const App = () => {
           <Route path="/sandbox" element={<Sandbox />} />
           <Route path="/log-hunt" element={<LogHunt />} />
           <Route path="/log-hunt/:huntId" element={<LogHuntPlayer />} />
+          <Route path="/notebook" element={<Notebook />} />
         </Routes>
       </Page.Main>
     </Page>
