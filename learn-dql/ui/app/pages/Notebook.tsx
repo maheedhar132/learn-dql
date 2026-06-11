@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
@@ -8,7 +8,7 @@ import {
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
-import { Select } from "@dynatrace/strato-components/forms";
+import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import {
   PlayIcon,
@@ -21,6 +21,7 @@ import {
 } from "@dynatrace/strato-icons";
 import { runQuery, type RunOutcome } from "../lib/validate";
 import { ResultTable } from "../components/ResultTable";
+import { loadSettings } from "../lib/settings";
 import {
   generateAppLogs,
   generateKubernetesStructuredLogs,
@@ -592,6 +593,12 @@ export const Notebook = () => {
   const [notebookTitle, setNotebookTitle] = useState("My DQL Notebook");
   const [saved, setSaved] = useState(false);
 
+  // Live-seed schema (Settings → Live Seed from Environment)
+  const liveSchema = useMemo(() => {
+    const s = loadSettings();
+    return s.liveSeedEnabled && s.liveSeedSchema ? s.liveSeedSchema : null;
+  }, []);
+
   // Ctrl+Enter: run the query cell containing the focused editor
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
@@ -684,18 +691,11 @@ export const Notebook = () => {
       {/* Header */}
       <Flex alignItems="center" justifyContent="space-between" gap={16} flexWrap="wrap">
         <Flex flexDirection="column" gap={4}>
-          <input
+          <TextInput
             value={notebookTitle}
-            onChange={(e) => setNotebookTitle(e.target.value)}
-            style={{
-              background: "transparent",
-              border: "none",
-              outline: "none",
-              fontSize: "1.6rem",
-              fontWeight: 700,
-              color: "inherit",
-              width: 400,
-            }}
+            onChange={(v) => setNotebookTitle(v ?? "")}
+            style={{ fontSize: "1.3rem", fontWeight: 700, width: 400 }}
+            aria-label="Notebook title"
           />
           <Paragraph style={{ opacity: 0.55, margin: 0, fontSize: "0.85rem" }}>
             Multi-cell DQL notebook · 8 data sources · auto-saved to browser
@@ -718,6 +718,30 @@ export const Notebook = () => {
       </Flex>
 
       <Divider />
+
+      {/* Live-seed schema banner */}
+      {liveSchema && liveSchema.logFields.length > 0 && (
+        <Surface>
+          <Flex flexDirection="column" padding={16} gap={8}>
+            <Flex alignItems="center" gap={8}>
+              <Strong>From your environment</Strong>
+              <Chip color="success">Live schema</Chip>
+              <Paragraph style={{ fontSize: "0.78rem", opacity: 0.55, margin: 0 }}>
+                {liveSchema.logFields.length} log fields · {liveSchema.spanFields.length} span fields
+                discovered from your tenant (Settings → Live Seed)
+              </Paragraph>
+            </Flex>
+            <Flex gap={4} flexWrap="wrap">
+              {liveSchema.logFields.slice(0, 25).map((f) => (
+                <Chip key={f.name} style={{ fontSize: "0.72rem" }}>
+                  <Code style={{ fontSize: "0.72rem" }}>{f.name}</Code>
+                  <span style={{ opacity: 0.5, marginLeft: 4 }}>{f.type}</span>
+                </Chip>
+              ))}
+            </Flex>
+          </Flex>
+        </Surface>
+      )}
 
       {/* Data source reference */}
       <Surface>

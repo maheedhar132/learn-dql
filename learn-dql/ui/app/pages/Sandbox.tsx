@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
@@ -13,6 +13,7 @@ import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { runQuery, type RunOutcome } from "../lib/validate";
 import { generateAppLogs } from "../lib/dql/log-generator";
 import { ResultTable } from "../components/ResultTable";
+import { loadSettings } from "../lib/settings";
 
 // 2,200 records matches the lesson dataset so sandbox queries produce the same counts.
 const SAMPLE = generateAppLogs(2200, 42);
@@ -66,6 +67,12 @@ const EXAMPLE_QUERIES = [
 export const Sandbox = () => {
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+
+  // Live-seed schema from Settings (if the user enabled it and fetched their env schema)
+  const liveSchema = useMemo(() => {
+    const s = loadSettings();
+    return s.liveSeedEnabled && s.liveSeedSchema ? s.liveSeedSchema : null;
+  }, []);
 
   const runWithQuery = useCallback((q: string) => {
     setOutcome(runQuery(q, SAMPLE));
@@ -195,6 +202,32 @@ export const Sandbox = () => {
                 ))}
               </Flex>
             </Flex>
+
+            {liveSchema && liveSchema.logFields.length > 0 && (
+              <>
+                <Divider />
+                <Flex flexDirection="column" gap={8}>
+                  <Flex alignItems="center" gap={6}>
+                    <Strong>From your environment</Strong>
+                    <Chip color="success">Live</Chip>
+                  </Flex>
+                  <Paragraph style={{ fontSize: "0.78rem", opacity: 0.6, margin: 0 }}>
+                    Real log fields discovered from your tenant. Click to insert into the query.
+                  </Paragraph>
+                  <Flex gap={4} flexWrap="wrap">
+                    {liveSchema.logFields.slice(0, 30).map((f) => (
+                      <Link
+                        key={f.name}
+                        onClick={() => setQuery((q) => (q ? `${q} ${f.name}` : `fetch logs\n| fields ${f.name}`))}
+                        style={{ fontSize: "0.78rem", cursor: "pointer" }}
+                      >
+                        <Code style={{ fontSize: "0.75rem" }}>{f.name}</Code>
+                      </Link>
+                    ))}
+                  </Flex>
+                </Flex>
+              </>
+            )}
 
             <Divider />
 
