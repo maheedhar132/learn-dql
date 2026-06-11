@@ -7,6 +7,11 @@ import {
   generateSpans,
   generatePaymentLogs,
   generateEventsWithTags,
+  generateKubernetesStructuredLogs,
+  generateAuditLogs,
+  generateSecurityEvents,
+  generateInfrastructureLogs,
+  generateApmSpans,
 } from "./log-generator";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1832,6 +1837,329 @@ export const scenarios: Scenario[] = [
         expectedPipeline: [],
         referenceQuery:
           "fetch logs\n| join kind:leftOuter, on:{host}, [\n    fetch service_registry\n    | fields host, service_tier\n  ]\n| filter isNull(service_tier)",
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 11 — Kubernetes Operations (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-k8s-001",
+    title: "Cluster Crash Investigation",
+    company: "NovaPlatform",
+    briefing:
+      "Multiple pods in the production cluster have started crash-looping. Your job: pinpoint which deployments are failing, understand the cause, and find the worst offenders by restart count.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Find pods not in Running phase",
+        narration:
+          "A healthy Kubernetes pod has `phase == \"Running\"`. Any other value — `CrashLoopBackOff`, `Failed`, `Pending` — signals trouble. Filtering to non-Running pods immediately separates the broken from the healthy without needing to know the exact failure mode yet. NovaPlatform's cluster has hundreds of pods; this single filter narrows the investigation to only the anomalous subset.",
+        lesson: "Filter for Non-Healthy Pod States",
+        goal: "Keep only records where phase is not Running.",
+        hint: 'filter phase != "Running"',
+        sampleData: generateKubernetesStructuredLogs(300, 42),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'phase != "Running"' }, raw: 'filter phase != "Running"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Group failures by deployment and reason",
+        narration:
+          "Now that you have only the failing pods, the next question is: which deployment has the most failures, and why? `summarize count(), by: {deployment, reason}` produces one row per unique deployment+reason combination, giving a quick matrix of what is breaking where. `OOMKilling` means the container exceeded its memory limit. `CrashLoopBackOff` means it keeps crashing on startup. `FailedMount` means a volume or secret is missing. Each reason points to a different fix.",
+        lesson: "Summarize by Multiple Fields",
+        goal: "Count failures grouped by deployment and reason.",
+        hint: "summarize count(), by: {deployment, reason}",
+        sampleData: generateKubernetesStructuredLogs(300, 42),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'phase != "Running"' }, raw: 'filter phase != "Running"' },
+          { id: "e3", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "deployment,reason" }, raw: "summarize count(), by: {deployment, reason}" },
+          { id: "e4", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Find the highest-restart pods",
+        narration:
+          "Restart count is the clearest quantitative signal of a crash-looping pod — the higher the number, the longer it has been failing. `summarize max_restarts = max(restart_count), by: {pod}` extracts the worst restart count for each pod. Sorting descending reveals the pods that have been struggling the longest. These are the priority targets: they have been failing repeatedly, meaning the issue is persistent, not a transient blip. NovaPlatform's SRE team uses this ranking to decide which pods to cordon and redeploy first.",
+        lesson: "Find Maximum Value per Group",
+        goal: "Per pod, find max restart count, ranked worst-first.",
+        hint: "summarize max_restarts = max(restart_count), by: {pod} | sort max_restarts desc",
+        sampleData: generateKubernetesStructuredLogs(300, 42),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "max_restarts", aggregation: "max", aggField: "restart_count", by: "pod" }, raw: "summarize max_restarts = max(restart_count), by: {pod}" },
+          { id: "e3", command: "sort", args: { field: "max_restarts", direction: "desc" }, raw: "sort max_restarts desc" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 12 — Audit Trail Analysis (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-audit-001",
+    title: "The Insider Threat",
+    company: "Meridian Finance",
+    briefing:
+      "Compliance flagged unusual activity on a privileged account. Investigate the audit trail: find denied actions, isolate high-risk operations, and rank users by suspicious activity.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Isolate denied and failed actions",
+        narration:
+          "Every access attempt in Meridian Finance's audit log records an `outcome`: `success`, `failure`, or `denied`. A `denied` outcome means the system actively blocked the action — the user tried to do something they were not permitted to do. Filtering to `outcome != \"success\"` captures both failures (unexpected errors) and denials (policy blocks), giving the full picture of rejected activity without needing to list every bad outcome explicitly.",
+        lesson: "Filter by Non-Success Outcomes",
+        goal: "Keep only records where outcome is not success.",
+        hint: 'filter outcome != "success"',
+        sampleData: generateAuditLogs(400, 7),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'outcome != "success"' }, raw: 'filter outcome != "success"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Flag high-risk actions",
+        narration:
+          "Not all audit events carry the same risk. `sudo_escalate`, `read_secrets`, and `bulk_delete` are the three highest-risk actions in Meridian's policy framework: they can bypass controls, expose credentials, or cause irreversible data loss. The `in` operator lets you match a field against a list of values cleanly — much more readable than three separate `or` conditions. Filtering to just these actions focuses the investigation on the events that matter most for a potential insider threat case.",
+        lesson: "Filter with the in Operator",
+        goal: "Keep only sudo_escalate, read_secrets, or bulk_delete actions.",
+        hint: 'filter action in ("sudo_escalate", "read_secrets", "bulk_delete")',
+        sampleData: generateAuditLogs(400, 7),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'action in ("sudo_escalate", "read_secrets", "bulk_delete")' }, raw: 'filter action in ("sudo_escalate", "read_secrets", "bulk_delete")' },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Rank users by high-risk action count",
+        narration:
+          "With the high-risk action population isolated, the final step is to rank users by how many such actions they performed. `summarize risky_actions = count(), by: {user}` produces one row per user with their total count. Sorting descending surfaces the most active users at the top — the compliance team at Meridian Finance will focus their review on the top 3 names in this list. If one user has significantly more entries than others, that is the account to investigate first.",
+        lesson: "Rank Users by Activity Count",
+        goal: "Count high-risk actions per user, ranked highest first.",
+        hint: "summarize risky_actions = count(), by: {user} | sort risky_actions desc",
+        sampleData: generateAuditLogs(400, 7),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'action in ("sudo_escalate", "read_secrets", "bulk_delete")' }, raw: 'filter action in ("sudo_escalate", "read_secrets", "bulk_delete")' },
+          { id: "e3", command: "summarize", args: { alias: "risky_actions", aggregation: "count", aggField: "", by: "user" }, raw: "summarize risky_actions = count(), by: {user}" },
+          { id: "e4", command: "sort", args: { field: "risky_actions", direction: "desc" }, raw: "sort risky_actions desc" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 13 — Security Event Triage (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-sec-001",
+    title: "MITRE ATT&CK Triage",
+    company: "ShieldOps",
+    briefing:
+      "The SIEM just generated 500+ security events. Your task: separate the noise from genuine threats, map events to MITRE tactics, and identify what made it through the defenses.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Isolate CRITICAL and HIGH severity events",
+        narration:
+          "ShieldOps classifies security events into four severity levels: LOW, MEDIUM, HIGH, and CRITICAL. For initial triage, you want to focus on the events most likely to represent active intrusions. Filtering to `severity in (\"CRITICAL\", \"HIGH\")` cuts the noise by excluding reconnaissance and low-confidence detections, leaving only the events that warrant immediate investigation. CRITICAL events — container escapes, reverse shells, lateral movement — demand a response within minutes.",
+        lesson: "Filter Security Events by Severity",
+        goal: "Keep only CRITICAL and HIGH severity events.",
+        hint: 'filter severity in ("CRITICAL", "HIGH")',
+        sampleData: generateSecurityEvents(400, 99),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'severity in ("CRITICAL", "HIGH")' }, raw: 'filter severity in ("CRITICAL", "HIGH")' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Map events to MITRE tactics",
+        narration:
+          "MITRE ATT&CK is a framework that categorizes adversary behaviors into tactics — the *why* — and techniques — the *how*. Grouping your security events by `mitre_tactic` tells you what phase of the attack chain you are seeing most: Discovery, Credential Access, Lateral Movement, Exfiltration. A spike in `Lateral Movement` events is more concerning than a spike in `Discovery`, because it means the attacker has already gained a foothold and is moving deeper. `summarize count(), by: {mitre_tactic}` gives you this tactical map instantly.",
+        lesson: "Summarize by MITRE Tactic",
+        goal: "Count events by MITRE tactic, ranked by frequency.",
+        hint: "summarize count(), by: {mitre_tactic} | sort count desc",
+        sampleData: generateSecurityEvents(400, 99),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'severity in ("CRITICAL", "HIGH")' }, raw: 'filter severity in ("CRITICAL", "HIGH")' },
+          { id: "e3", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "mitre_tactic" }, raw: "summarize count(), by: {mitre_tactic}" },
+          { id: "e4", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Find events that bypassed the firewall",
+        narration:
+          "Most security rules block or alert on matches. But some events slip through with `action == \"allowed\"` — the detection fired but the traffic was permitted anyway. These are the most dangerous events: the attacker succeeded. Filtering for `action == \"allowed\"` on CRITICAL/HIGH events gives ShieldOps a precise list of intrusion attempts that were not stopped. This is the 'things that actually happened' list — everything else was blocked, but these events represent confirmed compromise activity that reached its target.",
+        lesson: "Find Allowed High-Severity Events",
+        goal: "Find CRITICAL or HIGH severity events that were allowed through.",
+        hint: 'filter severity in ("CRITICAL", "HIGH") | filter action == "allowed"',
+        sampleData: generateSecurityEvents(400, 99),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: 'severity in ("CRITICAL", "HIGH")' }, raw: 'filter severity in ("CRITICAL", "HIGH")' },
+          { id: "e3", command: "filter", args: { condition: 'action == "allowed"' }, raw: 'filter action == "allowed"' },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 14 — Infrastructure Health (Intermediate)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-infra-001",
+    title: "The Overloaded Fleet",
+    company: "ScaleForge",
+    briefing:
+      "Latency alarms are firing across ScaleForge's production fleet. Diagnose which hosts are under resource pressure, understand which roles are most affected, and build a health score.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Find hosts under CPU pressure",
+        narration:
+          "A CPU utilization above 80% is the standard threshold for 'elevated load' — at this point, the OS starts queuing processes and latency increases. ScaleForge tracks CPU usage in `cpu_pct` on every host snapshot. Filtering `cpu_pct > 80` immediately shows which hosts are running hot. These are the first candidates for scaling out or moving workloads. Combined with the `role` field, you can tell whether the pressure is in the web tier (user-facing impact) or in workers (background job delays).",
+        lesson: "Filter by Numeric Threshold",
+        goal: "Find host snapshots where CPU usage exceeds 80%.",
+        hint: "filter cpu_pct > 80",
+        sampleData: generateInfrastructureLogs(500, 33),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "cpu_pct > 80" }, raw: "filter cpu_pct > 80" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Average CPU and memory by role",
+        narration:
+          "Individual host snapshots show point-in-time readings, but the bigger picture is how each role is faring on average. Web servers handle user traffic; databases handle persistence; cache nodes handle hot-path reads. `summarize avg_cpu = avg(cpu_pct), avg_mem = avg(mem_pct), by: {role}` distills the full dataset to one row per role. ScaleForge engineers use this to decide where to add capacity — if `database` has the highest average CPU, that tier needs scaling first, regardless of which individual host looks worst.",
+        lesson: "Average Multiple Metrics by Group",
+        goal: "Per role, compute average CPU and memory percentage.",
+        hint: "summarize avg_cpu = avg(cpu_pct), avg_mem = avg(mem_pct), by: {role}",
+        sampleData: generateInfrastructureLogs(500, 33),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "avg_cpu", aggregation: "avg", aggField: "cpu_pct" },
+                { alias: "avg_mem", aggregation: "avg", aggField: "mem_pct" },
+              ],
+              by: "role",
+            },
+            raw: "summarize avg_cpu = avg(cpu_pct), avg_mem = avg(mem_pct), by: {role}",
+          },
+          { id: "e3", command: "sort", args: { field: "avg_cpu", direction: "desc" }, raw: "sort avg_cpu desc" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Identify multi-resource stressed hosts",
+        narration:
+          "A host under CPU pressure alone can often cope. A host simultaneously under CPU *and* memory pressure is in genuine trouble — it is likely thrashing and cannot free resources. `filter cpu_pct > 80 and mem_pct > 80` finds these double-stressed hosts. At ScaleForge, a host matching both conditions is an automatic candidate for emergency scale-out: waiting for it to self-recover is not an option. The `and` operator here is doing real analytical work — it is not just two filters in sequence but a logical AND that both conditions must satisfy on the same record.",
+        lesson: "Compound Filter with AND",
+        goal: "Find snapshots where both CPU and memory exceed 80%.",
+        hint: "filter cpu_pct > 80 and mem_pct > 80",
+        sampleData: generateInfrastructureLogs(500, 33),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "cpu_pct > 80 and mem_pct > 80" }, raw: "filter cpu_pct > 80 and mem_pct > 80" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 15 — APM Trace Analysis (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-apm-001",
+    title: "Tracing the Latency Spike",
+    company: "StreamCart",
+    briefing:
+      "P95 checkout latency has risen from 200ms to 1.4s. Dig into the APM spans to find the slow service, the worst operation, and the error rate driving user impact.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Find slow spans above 1 second",
+        narration:
+          "A span represents one unit of work in a distributed trace — a service call, a database query, a cache lookup. Duration above 1000ms is unusual for most operations in StreamCart's architecture; these are the spans contributing to the P95 latency spike. Filtering `duration_ms > 1000` isolates them from the thousands of fast spans in the dataset. The `service` and `operation` fields on these records will tell you exactly which part of the system is slow — the data you need before you can form any hypothesis.",
+        lesson: "Filter Spans by Duration Threshold",
+        goal: "Keep only spans with duration_ms over 1000 ms.",
+        hint: "filter duration_ms > 1000",
+        sampleData: generateApmSpans(500, 55),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "filter", args: { condition: "duration_ms > 1000" }, raw: "filter duration_ms > 1000" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Compute error rate per service",
+        narration:
+          "Latency and errors often go together: a downstream service timing out causes the caller to wait. To understand which services are contributing to both problems, compute the error rate per service. `summarize total = count(), errors = countIf(is_error == true), by: {service}` gives you both the volume and the error count in one pipeline. Dividing errors by total would give you the rate, but for triage purposes, raw counts are often enough — a service with 50 errors out of 60 calls is in crisis, regardless of the percentage.",
+        lesson: "Count Errors with countIf",
+        goal: "Per service, compute total spans and error count.",
+        hint: "summarize total = count(), errors = countIf(is_error == true), by: {service}",
+        sampleData: generateApmSpans(500, 55),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "summarize",
+            args: {
+              aggs: [
+                { alias: "total", aggregation: "count", aggField: "" },
+                { alias: "errors", aggregation: "countif", aggField: "is_error == true" },
+              ],
+              by: "service",
+            },
+            raw: "summarize total = count(), errors = countIf(is_error == true), by: {service}",
+          },
+          { id: "e3", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Find the slowest operations by median duration",
+        narration:
+          "Max duration is noisy — a single outlier can dominate the ranking. Median (P50) duration is a better measure of the typical experience for each operation. `summarize p50 = median(duration_ms), by: {service, operation}` produces one row per service+operation pair with its median latency. Sorting by `p50 desc` puts the slowest operations at the top. For StreamCart, this is the definitive answer to 'what is slow': not which call had the worst spike, but which call is *consistently* slow across all its invocations.",
+        lesson: "Median Duration per Operation",
+        goal: "Per service and operation, compute median duration_ms.",
+        hint: "summarize p50 = median(duration_ms), by: {service, operation} | sort p50 desc",
+        sampleData: generateApmSpans(500, 55),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "p50", aggregation: "median", aggField: "duration_ms", by: "service,operation" }, raw: "summarize p50 = median(duration_ms), by: {service, operation}" },
+          { id: "e3", command: "sort", args: { field: "p50", direction: "desc" }, raw: "sort p50 desc" },
+        ],
       },
     ],
   },
