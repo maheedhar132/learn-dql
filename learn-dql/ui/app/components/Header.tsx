@@ -22,6 +22,9 @@ export const Header = () => {
         <AppHeader.NavItem as={Link} to="/codex">
           Reference
         </AppHeader.NavItem>
+        <AppHeader.NavItem as={Link} to="/settings">
+          Settings
+        </AppHeader.NavItem>
       </AppHeader.NavItems>
     </AppHeader>
   );

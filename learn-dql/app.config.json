@@ -2,13 +2,19 @@
   "$schema": "./.dt-app/app.config.schema.json",
   "environmentUrl": "https://wkf10640.apps.dynatrace.com/",
   "app": {
-    "name": "learn-dql",
-    "version": "0.0.0",
-    "description": "A starting project with routing, fetching data, and charting",
+    "name": "Learn DQL",
+    "version": "0.2.0",
+    "description": "Interactive DQL learning and sandbox — offline-first, optional live environment",
     "id": "my.learn.dql",
     "scopes": [
-      { "name": "storage:logs:read", "comment": "default template" },
-      { "name": "storage:buckets:read", "comment": "default template" }
+      { "name": "storage:logs:read", "comment": "Read logs for Grail queries and live-seed feature" },
+      { "name": "storage:buckets:read", "comment": "Read bucket metadata for system queries" },
+      { "name": "storage:spans:read", "comment": "Read distributed trace spans" },
+      { "name": "storage:events:read", "comment": "Read Dynatrace events" },
+      { "name": "storage:bizevents:read", "comment": "Read business events" },
+      { "name": "storage:metrics:read", "comment": "Read metrics for timeseries queries" },
+      { "name": "storage:system:read", "comment": "Read dt.system.* tables (query executions, deployments)" },
+      { "name": "entity:read", "comment": "Read entity model for lookup/join scenarios and dt.entity.* queries" }
     ]
   }
 }

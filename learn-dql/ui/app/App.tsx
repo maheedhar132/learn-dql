@@ -10,6 +10,7 @@ import { LogHunt } from "./pages/LogHunt";
 import { LogHuntPlayer } from "./pages/LogHuntPlayer";
 import { Notebook } from "./pages/Notebook";
 import { Codex } from "./pages/Codex";
+import { Settings } from "./pages/Settings";
 
 export const App = () => {
   return (
@@ -27,6 +28,7 @@ export const App = () => {
           <Route path="/log-hunt/:huntId" element={<LogHuntPlayer />} />
           <Route path="/notebook" element={<Notebook />} />
           <Route path="/codex" element={<Codex />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </Page.Main>
     </Page>

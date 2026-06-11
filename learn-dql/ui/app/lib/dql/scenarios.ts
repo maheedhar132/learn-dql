@@ -12,6 +12,8 @@ import {
   generateSecurityEvents,
   generateInfrastructureLogs,
   generateApmSpans,
+  generateJsonLogs,
+  generateNginxLogs,
 } from "./log-generator";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2159,6 +2161,286 @@ export const scenarios: Scenario[] = [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "summarize", args: { alias: "p50", aggregation: "median", aggField: "duration_ms", by: "service,operation" }, raw: "summarize p50 = median(duration_ms), by: {service, operation}" },
           { id: "e3", command: "sort", args: { field: "p50", direction: "desc" }, raw: "sort p50 desc" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 16 — Parsing Unstructured Data (Intermediate–Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-parse-001",
+    title: "Mining JSON Logs",
+    company: "StackAPI",
+    briefing:
+      "StackAPI's application services emit structured JSON in the log content field. Most analysts query raw content — this lesson shows how parse transforms unstructured content into queryable fields.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Extract fields from JSON content",
+        narration:
+          "Real-world application logs often write the entire log event as a JSON object inside the `content` field: `{\"level\":\"ERROR\",\"service\":\"order-service\",\"latency_ms\":412}`. Without `parse`, you can only `filter contains(content, \"ERROR\")` — a slow, imprecise text search. With `parse content, JSON:parsed`, DQL deserializes the JSON and spreads every key directly onto the record row. After the parse step, `level`, `service`, and `latency_ms` are first-class filterable fields. This is the single most transformative DQL command for structured application logs.",
+        lesson: "Parse JSON Content into Fields",
+        goal: "Extract all JSON fields from log content using parse JSON.",
+        hint: 'parse content, "JSON:event"',
+        sampleData: generateJsonLogs(200, 11),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "JSON:event" }, raw: 'parse content, "JSON:event"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Filter and aggregate on parsed fields",
+        narration:
+          "Once the JSON is parsed into fields, the pipeline continues exactly like any other DQL query — all the standard commands work on the newly extracted fields. `filter level == \"ERROR\"` now does an exact match rather than a fuzzy text search; `summarize count(), by: {service}` groups by the actual service name rather than hoping the string appears in content. This is the key payoff of parse: structured queries on unstructured data. StackAPI's on-call engineers use this to instantly see which microservice is throwing the most errors without reading raw JSON.",
+        lesson: "Query Parsed Fields Like Native Fields",
+        goal: "After parsing, filter for ERROR level and count by service.",
+        hint: 'parse content, "JSON:event" | filter level == "ERROR" | summarize count(), by: {service}',
+        sampleData: generateJsonLogs(200, 11),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "JSON:event" }, raw: 'parse content, "JSON:event"' },
+          { id: "e3", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
+          { id: "e4", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "host" }, raw: "summarize count(), by: {host}" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-parse-002",
+    title: "Typed Pattern Extraction",
+    company: "WebGrid",
+    briefing:
+      "WebGrid's NGINX access logs are plain text — not JSON. Use DQL typed capture groups to extract structured fields like IP addresses, status codes, and byte counts from the raw log line.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Extract IP and status with typed capture groups",
+        narration:
+          "DQL's `parse` command supports typed tokens that match and coerce specific value shapes. `IPADDR:client_ip` matches a dotted-quad IPv4 address and assigns it to `client_ip`. `INT:status` matches an integer and stores it as a number (not a string), enabling numeric comparisons like `filter status >= 400`. The token `LD` (literal delimiter) is a wildcard that skips any characters between the parts you care about — it is the 'go to the next thing' instruction. For WebGrid's Nginx access logs formatted as `IP LD STATUS LD BYTES`, this single parse line extracts three structured fields from a free-text line.",
+        lesson: "Typed Tokens: IPADDR, INT, LD",
+        goal: "Extract client_ip (IPADDR), status (INT), and bytes (LONG) from content.",
+        hint: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"',
+        sampleData: generateNginxLogs(300, 22),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LD LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Filter errors and rank by IP",
+        narration:
+          "After extraction, `status` is a real integer — `filter status >= 400` does a numeric comparison, not a string search. Aggregating by `client_ip` shows which IP addresses generated the most client and server errors. For WebGrid, this query is the first step in detecting scraper abuse or DDoS: IPs generating hundreds of 4xx responses per minute are candidates for rate-limiting. The combination of typed parse + numeric filter + summarize by IP is one of the most powerful patterns in web log analysis.",
+        lesson: "Numeric Filter on Parsed INT Field",
+        goal: "After parsing, filter status >= 400 and count errors per client IP.",
+        hint: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes" | filter status >= 400 | summarize errors = count(), by: {client_ip} | sort errors desc',
+        sampleData: generateNginxLogs(300, 22),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LD LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"' },
+          { id: "e3", command: "filter", args: { condition: "status >= 400" }, raw: "filter status >= 400" },
+          { id: "e4", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "client_ip" }, raw: "summarize errors = count(), by: {client_ip}" },
+          { id: "e5", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "case-parse-003",
+    title: "Key-Value Log Extraction",
+    company: "DataBridge",
+    briefing:
+      "DataBridge's internal services emit structured-but-not-JSON logs: `user=alice action=export_data outcome=success duration_ms=312`. The KVP parser turns these into queryable fields in one step.",
+    difficulty: "Intermediate",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Parse key=value pairs",
+        narration:
+          "The KVP (Key-Value Pair) pattern is designed for logs that are already partially structured — the application wrote each value as `key=value` but didn't serialize as JSON. `parse content, KVP:fields` scans the content string for all whitespace-delimited tokens that contain `=`, splits each on the first `=`, and adds both sides as fields on the record. After this single parse step, `user`, `action`, `outcome`, and `duration_ms` are all first-class DQL fields. DataBridge's audit pipeline uses this to query operator actions without any log format changes on the application side.",
+        lesson: "KVP Pattern: Parse key=value Logs",
+        goal: "Extract key=value fields from content using KVP parse.",
+        hint: 'parse content, "KVP:fields"',
+        sampleData: generateAuditLogs(250, 15),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:fields" }, raw: 'parse content, "KVP:fields"' },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Summarize outcomes per action",
+        narration:
+          "With `user`, `action`, and `outcome` extracted as fields, DQL can now answer 'how many times did each action succeed versus fail?' The `summarize` command counts records grouped by the two fields. This gives DataBridge's compliance team a per-action breakdown without needing any ETL pipeline or schema migration — just a parse step at query time. This is the core value of server-side parse: structured analytics on logs that were written as plain text.",
+        lesson: "Aggregate Over KVP-Parsed Fields",
+        goal: "Count events grouped by action and outcome.",
+        hint: 'parse content, "KVP:fields" | summarize count(), by: {action, outcome}',
+        sampleData: generateAuditLogs(250, 15),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:fields" }, raw: 'parse content, "KVP:fields"' },
+          { id: "e3", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "action,outcome" }, raw: "summarize count(), by: {action, outcome}" },
+          { id: "e4", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 17 — Lookup and Entity Enrichment (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-lookup-001",
+    title: "Enriching Logs with Context",
+    company: "OptiCloud",
+    briefing:
+      "OptiCloud's infrastructure logs contain a `host` field but no environment, tier, or owner metadata. Use lookup to enrich every log record with host-level context from a registry table — without a full join.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Understand lookup vs join",
+        narration:
+          "DQL has two enrichment commands: `join` and `lookup`. The difference is subtle but important. `join` is a relational operation: it can produce multiple rows for one left record if multiple right records match the join key. `lookup` is a point-in-time enrichment: it finds the **first** matching right row and merges its fields into the left row, then moves on. This makes lookup safer for enrichment — you always get at most one result per left record. A join would create duplicate rows if the registry had two entries for the same host. For metadata enrichment (adding environment, owner, tier to a log record), lookup is almost always the right choice over join.",
+        lesson: "Lookup vs Join — Choose Lookup for Enrichment",
+        goal: "Read and understand when to use lookup vs join.",
+        hint: "No query — this is a concept step.",
+        sampleData: [],
+        expectedPipeline: [],
+        referenceQuery: "fetch logs\n| lookup sourceField:host, lookupField:host,\n    [fetch host_registry],\n    prefix:meta.",
+      },
+      {
+        id: "step-2",
+        title: "Enrich logs with host metadata",
+        narration:
+          "The `lookup` command syntax: `lookup sourceField:<leftField>, lookupField:<rightField>, [subquery], prefix:<prefix>`. The `sourceField` is the field in your left (log) data; `lookupField` is the matching field in the right (registry) data; `prefix` is prepended to all imported right-side fields to avoid name collisions. For OptiCloud: `lookup sourceField:host, lookupField:host` matches each log record to its registry entry by hostname and brings in `service_tier` and `environment` as `meta.service_tier` and `meta.environment`. Records with no match in the registry are preserved with null for the prefix fields — lookup is always left-outer semantics.",
+        lesson: "Lookup Syntax and Left-Outer Semantics",
+        goal: "Enrich logs with host tier and environment from the registry.",
+        hint: "fetch logs | lookup sourceField:host, lookupField:host, [fetch host_registry], prefix:meta.",
+        sampleData: generateInfrastructureLogs(200, 44),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "lookup",
+            args: {
+              sourceField: "host",
+              lookupField: "host",
+              prefix: "meta.",
+              records: (() => {
+                const hosts = [
+                  { host: "prod-app-01", environment: "production", service_tier: "web", owner: "platform-team" },
+                  { host: "prod-app-02", environment: "production", service_tier: "web", owner: "platform-team" },
+                  { host: "prod-app-03", environment: "production", service_tier: "web", owner: "platform-team" },
+                  { host: "prod-db-01", environment: "production", service_tier: "database", owner: "dba-team" },
+                  { host: "prod-db-02", environment: "production", service_tier: "database", owner: "dba-team" },
+                  { host: "prod-cache-01", environment: "production", service_tier: "cache", owner: "platform-team" },
+                  { host: "prod-worker-01", environment: "production", service_tier: "worker", owner: "backend-team" },
+                  { host: "prod-worker-02", environment: "production", service_tier: "worker", owner: "backend-team" },
+                  { host: "prod-k8s-01", environment: "production", service_tier: "k8s-node", owner: "sre-team" },
+                  { host: "prod-k8s-02", environment: "production", service_tier: "k8s-node", owner: "sre-team" },
+                ];
+                return hosts;
+              })(),
+            },
+            raw: "lookup sourceField:host, lookupField:host, [fetch host_registry], prefix:meta.",
+          },
+        ],
+      },
+      {
+        id: "step-3",
+        title: "Filter and group by enriched field",
+        narration:
+          "After the lookup, `meta.service_tier` and `meta.owner` are first-class fields on every log record. This unlocks queries that were impossible before: `filter meta.service_tier == \"database\"` selects only database-tier logs; `summarize count(), by: {meta.owner}` tells you which team's systems are generating the most log volume. OptiCloud uses this pattern to produce per-team infrastructure health summaries without requiring every service to emit an `owner` field in its logs — the metadata lives in the registry and is joined at query time.",
+        lesson: "Filter and Aggregate on Lookup-Enriched Fields",
+        goal: "Filter for database-tier hosts and count logs per owner.",
+        hint: 'lookup ... | filter meta.service_tier == "database" | summarize count(), by: {meta.owner}',
+        sampleData: generateInfrastructureLogs(200, 44),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          {
+            id: "e2",
+            command: "lookup",
+            args: {
+              sourceField: "host",
+              lookupField: "host",
+              prefix: "meta.",
+              records: [
+                { host: "prod-app-01", environment: "production", service_tier: "web", owner: "platform-team" },
+                { host: "prod-app-02", environment: "production", service_tier: "web", owner: "platform-team" },
+                { host: "prod-app-03", environment: "production", service_tier: "web", owner: "platform-team" },
+                { host: "prod-db-01", environment: "production", service_tier: "database", owner: "dba-team" },
+                { host: "prod-db-02", environment: "production", service_tier: "database", owner: "dba-team" },
+                { host: "prod-cache-01", environment: "production", service_tier: "cache", owner: "platform-team" },
+                { host: "prod-worker-01", environment: "production", service_tier: "worker", owner: "backend-team" },
+                { host: "prod-worker-02", environment: "production", service_tier: "worker", owner: "backend-team" },
+                { host: "prod-k8s-01", environment: "production", service_tier: "k8s-node", owner: "sre-team" },
+                { host: "prod-k8s-02", environment: "production", service_tier: "k8s-node", owner: "sre-team" },
+              ],
+            },
+            raw: "lookup sourceField:host, lookupField:host, [fetch host_registry], prefix:meta.",
+          },
+          { id: "e3", command: "filter", args: { condition: 'meta.service_tier == "database"' }, raw: 'filter meta.service_tier == "database"' },
+          { id: "e4", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "meta.owner" }, raw: "summarize count(), by: {meta.owner}" },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 18 — Expand, countDistinct, and Time Functions (Advanced)
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: "case-adv-expand-001",
+    title: "Array Expansion and Deduplication",
+    company: "TagForge",
+    briefing:
+      "TagForge logs events with a `tags` array field. Use expand to flatten arrays into rows, then countDistinct to measure cardinality, and time functions to detect weekly patterns.",
+    difficulty: "Advanced",
+    track: "dql",
+    tier: "free",
+    steps: [
+      {
+        id: "step-1",
+        title: "Count distinct values with countDistinct",
+        narration:
+          "Sometimes you need to know 'how many unique values exist?' rather than 'how many records are there?' For example: 'how many distinct hosts logged an error today?' is a cardinality question. `summarize countDistinct(host)` gives you the count of unique values in a field across all records. This is different from `count()` — if `host-01` logged 50 errors, `count()` gives 50 but `countDistinct(host)` counts it as 1. TagForge uses this to measure how many unique users performed an action in a given period — the cardinality of the `user` field is the metric that matters for license compliance.",
+        lesson: "countDistinct — Unique Value Counting",
+        goal: "Count the number of distinct users in the audit log.",
+        hint: "summarize distinct_users = countDistinct(user)",
+        sampleData: generateAuditLogs(300, 19),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "summarize", args: { alias: "distinct_users", aggregation: "countdistinct", aggField: "user" }, raw: "summarize distinct_users = countDistinct(user)" },
+        ],
+      },
+      {
+        id: "step-2",
+        title: "Bucket events by hour of day",
+        narration:
+          "DQL's `getHour(timestamp)` extracts the hour component (0–23) from a timestamp. Using it in a `fieldsAdd` step creates a derived column that can then be used in `summarize ... by: {hour}` to produce an hourly breakdown. This pattern is essential for finding time-of-day patterns: peak error hours, off-hours access by privileged accounts, or request volume by timezone. TagForge's security team runs this query daily to detect anomalous activity outside business hours (typically anything before hour 8 or after hour 18 in their local timezone is flagged for review).",
+        lesson: "Time Functions: getHour for Hourly Patterns",
+        goal: "Count events by hour of day to find activity patterns.",
+        hint: "fieldsAdd hour = getHour(timestamp) | summarize count(), by: {hour} | sort hour",
+        sampleData: generateAuditLogs(300, 19),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
+          { id: "e2", command: "fieldsAdd", args: { assignments: "hour = getHour(timestamp)" }, raw: "fieldsAdd hour = getHour(timestamp)" },
+          { id: "e3", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "hour" }, raw: "summarize count(), by: {hour}" },
+          { id: "e4", command: "sort", args: { field: "hour", direction: "asc" }, raw: "sort hour asc" },
         ],
       },
     ],

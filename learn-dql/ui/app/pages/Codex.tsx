@@ -25,7 +25,11 @@ const CATEGORY_ICONS: Record<QueryCategory, string> = {
   joins: "🔀",
   aggregation: "∑",
   parsing: "🔍",
+  system: "⚙️",
+  entities: "🏗️",
 };
+
+const FREE_CATEGORIES = new Set<QueryCategory>(["system", "entities"]);
 
 type DifficultyColor = "success" | "critical" | undefined;
 
@@ -65,6 +69,9 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
             <Chip>
               {CATEGORY_ICONS[entry.category]} {capitalize(entry.category)}
             </Chip>
+            {FREE_CATEGORIES.has(entry.category) && (
+              <Chip color="success">Free</Chip>
+            )}
           </Flex>
         </Flex>
 

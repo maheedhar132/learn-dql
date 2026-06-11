@@ -1,6 +1,8 @@
-# learn-dql
+# learn-dql — v0.2.0
 
-Interactive DQL/DPL learning app built on Dynatrace AppEngine. Teaches Dynatrace Query Language through step-by-step guided lessons, a free-form sandbox, and Log Hunt investigation scenarios — entirely offline, no live Grail queries.
+**The go-to platform for learning, practising, and retaining Dynatrace Query Language (DQL) — without worrying about costs.**
+
+Built on Dynatrace AppEngine (Strato v3). Runs entirely in the browser with an offline DQL simulation engine.  No Grail DDU consumed during practice. Optional live-environment integration for real log schema discovery.
 
 ---
 
@@ -8,10 +10,9 @@ Interactive DQL/DPL learning app built on Dynatrace AppEngine. Teaches Dynatrace
 
 | Path | Contents |
 |---|---|
-| `learn-dql/` | **The app** — Dynatrace AppEngine project (go-forward codebase) |
+| `learn-dql/` | **The app** — Dynatrace AppEngine project (v0.2.0) |
 | `dql-research/` | 9 reference docs: DQL overview, types, operators, commands, functions, best practices, examples, visual signatures, Grail architecture |
 | `DQL_DPL_COMPREHENSIVE_GUIDE.md` | 1,294-line authored DQL/DPL reference guide |
-| `PROJECT_DECK.md` | Product vision, feature phases, and architecture decisions |
 | `CLAUDE.md` | Binding rules for AI-assisted development on this repo |
 
 ---
@@ -20,12 +21,16 @@ Interactive DQL/DPL learning app built on Dynatrace AppEngine. Teaches Dynatrace
 
 | Page | What it does |
 |---|---|
-| **Home** | Progress overview, resume widget, Log Hunt teaser |
-| **Lessons** | 60+ guided scenarios across Onboarding and DQL tracks; step-by-step with result-based validation |
-| **Sandbox** | Free-form DQL editor against 2,200 deterministic sample log records |
-| **Log Hunt** | 10 investigation scenarios — read logs, form a hypothesis, answer a multiple-choice verdict |
+| **Home** (`/`) | Progress overview, resume widget, Log Hunt teaser |
+| **Learn** (`/learn`) | 50+ guided lessons across 18 modules — Beginner → Advanced |
+| **Sandbox** (`/sandbox`) | Free-form DQL editor against 8 seeded data sources |
+| **Notebook** (`/notebook`) | Multi-cell DT-style notebook — query + text cells, Run All, localStorage persistence |
+| **Log Hunt** (`/log-hunt`) | 10 mystery investigation scenarios — write your own queries to crack the case |
+| **Reference** (`/codex`) | 35+ searchable production-ready DQL patterns, including free dt.system.* and entity queries |
+| **Settings** (`/settings`) | Live-Seed toggle: fetch real log field schema from your connected DT environment |
 
-All query execution runs in the browser against deterministic offline data. No live Dynatrace environment is needed to use the app.
+All query execution runs in the browser against deterministic seeded data — no live Dynatrace environment needed.  
+Free `dt.system.*` and `dt.entity.*` queries can run against your real environment with zero DDU cost.
 
 ---
 

@@ -36,6 +36,10 @@ export function executeCommand(
       return execSearch(data, columns, args);
     case "parse":
       return execParse(data, columns, args);
+    case "lookup":
+      return execLookup(data, columns, args);
+    case "timeseries":
+      return execTimeseries(data, columns);
     case "expand":
       return execExpand(data, columns, args);
     case "append":
@@ -275,6 +279,90 @@ function execSearch(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Typed-capture helpers for execParse
+// ---------------------------------------------------------------------------
+
+/** Describes one named capture group extracted from a DQL typed pattern. */
+interface TypedCapture {
+  name: string;
+  type: "string" | "long" | "double" | "timestamp";
+}
+
+/**
+ * Compile a DQL typed pattern string into a RegExp plus an ordered list of
+ * named captures so match groups can be mapped back to field names.
+ *
+ * Supported tokens:
+ *   IPADDR:name  → (\d+\.\d+\.\d+\.\d+)
+ *   INT:name     → (\d+)
+ *   LONG:name    → (\d+)
+ *   DOUBLE:name  → (\d+(?:\.\d+)?)
+ *   DATA:name    → (\S+)
+ *   STRING:name  → ("(?:[^"\\]|\\.)*"|\S+)
+ *   TIMESTAMP:name → (\d{4}-\d{2}-\d{2}T[\d:.]+Z?)
+ *   LD           → .*?   (skip)
+ *   LD{DATA:x}   → .*?   (skip, the nested capture is ignored for simplicity)
+ */
+function compileTypedPattern(pattern: string): { regex: RegExp; captures: TypedCapture[] } | null {
+  const captures: TypedCapture[] = [];
+
+  // Replace typed tokens with regex fragments, collecting names in order.
+  let regexSrc = pattern
+    // Escape regex special chars EXCEPT our placeholder markers first.
+    // We process token by token so we can safely escape the literal parts.
+    .replace(/[-[\]{}()*+?.,\\^$|#]/g, (ch) => `\\${ch}`);
+
+  // Now substitute the (escaped) typed tokens back.
+  // After escaping, "IPADDR:name" stays as-is (letters and colon are not escaped).
+  // We process longest-match types first to avoid partial matches.
+
+  // LD{...} — skip (greedy skip over the nested part)
+  regexSrc = regexSrc.replace(/LD\\\{[^}]*\\\}/g, ".*?");
+  // LD alone
+  regexSrc = regexSrc.replace(/\bLD\b/g, ".*?");
+
+  const tokenRe = /\b(IPADDR|INT|LONG|DOUBLE|DATA|STRING|TIMESTAMP):([A-Za-z_][A-Za-z0-9_]*)/g;
+  const captureOrder: Array<{ type: string; name: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = tokenRe.exec(regexSrc)) !== null) {
+    captureOrder.push({ type: m[1], name: m[2] });
+  }
+
+  regexSrc = regexSrc.replace(
+    /\b(IPADDR|INT|LONG|DOUBLE|DATA|STRING|TIMESTAMP):([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_, type: string) => {
+      switch (type) {
+        case "IPADDR":    return "(\\d+\\.\\d+\\.\\d+\\.\\d+)";
+        case "INT":
+        case "LONG":      return "(\\d+)";
+        case "DOUBLE":    return "(\\d+(?:\\.\\d+)?)";
+        case "DATA":      return "(\\S+)";
+        case "STRING":    return '("(?:[^"\\\\]|\\\\.)*"|\\S+)';
+        case "TIMESTAMP": return "(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z?)";
+        default:          return "(\\S+)";
+      }
+    }
+  );
+
+  // Map type strings to DQLColumn types
+  for (const { type, name } of captureOrder) {
+    let colType: TypedCapture["type"] = "string";
+    if (type === "INT" || type === "LONG") colType = "long";
+    else if (type === "DOUBLE") colType = "double";
+    else if (type === "TIMESTAMP") colType = "timestamp";
+    captures.push({ name, type: colType });
+  }
+
+  if (captures.length === 0) return null;
+
+  try {
+    return { regex: new RegExp(regexSrc, "s"), captures };
+  } catch {
+    return null;
+  }
+}
+
 function execParse(
   data: DQLRecord[],
   columns: DQLColumn[],
@@ -285,20 +373,100 @@ function execParse(
   if (!pattern) return { data, columns };
 
   const newCols = [...columns];
+
+  // Helper to register a column only once
+  function ensureCol(name: string, type: string): void {
+    if (!newCols.find((c) => c.name === name)) {
+      newCols.push({ name, type });
+    }
+  }
+
+  // ── 1a. JSON pattern: JSON:<alias> ──────────────────────────────────────
+  const jsonMatch = pattern.match(/^JSON:([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (jsonMatch) {
+    const out = data.map((row) => {
+      const content = String(row[field] || "");
+      try {
+        const parsed: unknown = JSON.parse(content);
+        if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+          const obj = parsed as Record<string, unknown>;
+          for (const key of Object.keys(obj)) ensureCol(key, "string");
+          return { ...row, ...obj };
+        }
+      } catch {
+        // leave row unchanged
+      }
+      return { ...row };
+    });
+    return { data: out, columns: newCols };
+  }
+
+  // ── 1b. KVP pattern: KVP:<alias> or pattern contains "key=value" pairs ──
+  const isKvpExplicit = /^KVP:/i.test(pattern);
+  const isKvpImplicit = !isKvpExplicit && pattern.includes("=") && !/[A-Z]+:[A-Za-z_]/.test(pattern);
+  if (isKvpExplicit || isKvpImplicit) {
+    const out = data.map((row) => {
+      const clone = { ...row };
+      const content = String(row[field] || "");
+      for (const token of content.split(/\s+/)) {
+        const eqIdx = token.indexOf("=");
+        if (eqIdx > 0) {
+          const k = token.slice(0, eqIdx);
+          const v = token.slice(eqIdx + 1);
+          const num = Number(v);
+          clone[k] = isNaN(num) ? v : num;
+          ensureCol(k, isNaN(num) ? "string" : "long");
+        }
+      }
+      return clone;
+    });
+    return { data: out, columns: newCols };
+  }
+
+  // ── 1c. Typed capture groups (IPADDR:, INT:, DATA:, etc.) ───────────────
+  const compiled = compileTypedPattern(pattern);
+  if (compiled) {
+    const { regex, captures } = compiled;
+    for (const cap of captures) ensureCol(cap.name, cap.type);
+
+    const out = data.map((row) => {
+      const clone = { ...row };
+      const content = String(row[field] || "");
+      const m = regex.exec(content);
+      if (m) {
+        captures.forEach((cap, i) => {
+          const raw = m[i + 1];
+          if (raw !== undefined) {
+            if (cap.type === "long") {
+              clone[cap.name] = parseInt(raw, 10);
+            } else if (cap.type === "double") {
+              clone[cap.name] = parseFloat(raw);
+            } else {
+              // Strip surrounding quotes from STRING captures
+              clone[cap.name] = raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
+            }
+          }
+        });
+      }
+      return clone;
+    });
+    return { data: out, columns: newCols };
+  }
+
+  // ── 1d. Fallback: original key=value extraction via type:name tokens ─────
   const out = data.map((row) => {
     const clone = { ...row };
     const content = String(row[field] || "");
     const matches = pattern.match(/([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)/g);
     if (matches) {
-      for (const m of matches) {
-        const [, name] = m.split(":");
+      for (const mtch of matches) {
+        const [, name] = mtch.split(":");
         const regex = new RegExp(`${name}=([^\\s,;]+)`);
         const found = content.match(regex);
         if (found) {
-          clone[name] = isNaN(Number(found[1])) ? found[1] : Number(found[1]);
-          if (!newCols.find((c) => c.name === name)) {
-            newCols.push({ name, type: isNaN(Number(found[1])) ? "string" : "long" });
-          }
+          const val = found[1];
+          clone[name] = isNaN(Number(val)) ? val : Number(val);
+          ensureCol(name, isNaN(Number(val)) ? "string" : "long");
         }
       }
     }
@@ -306,6 +474,66 @@ function execParse(
   });
 
   return { data: out, columns: newCols };
+}
+
+// ---------------------------------------------------------------------------
+// execLookup — left-outer join against a pre-seeded right-side table
+// ---------------------------------------------------------------------------
+
+function execLookup(
+  data: DQLRecord[],
+  columns: DQLColumn[],
+  args: Record<string, unknown>
+): { data: DQLRecord[]; columns: DQLColumn[] } {
+  const sourceField = String(args.sourceField || "");
+  const lookupField = String(args.lookupField || "");
+  const prefix = String(args.prefix || "lookup.");
+  const rightRecords = (args.records as DQLRecord[]) || [];
+  const fieldFilter = Array.isArray(args.fields) ? (args.fields as string[]) : null;
+
+  if (!sourceField || !lookupField || rightRecords.length === 0) {
+    return { data, columns };
+  }
+
+  // Build lookup index: lookupField value → first matching right row
+  const index = new Map<unknown, DQLRecord>();
+  for (const row of rightRecords) {
+    const k = row[lookupField];
+    if (!index.has(k)) index.set(k, row);
+  }
+
+  const newCols = [...columns];
+
+  const out = data.map((row) => {
+    const clone = { ...row };
+    const k = row[sourceField];
+    const right = index.get(k);
+    if (right) {
+      const keys = fieldFilter ?? Object.keys(right);
+      for (const rk of keys) {
+        if (rk === lookupField) continue; // avoid duplicating the join key
+        const prefixed = `${prefix}${rk}`;
+        clone[prefixed] = right[rk];
+        if (!newCols.find((c) => c.name === prefixed)) {
+          newCols.push({ name: prefixed, type: "string" });
+        }
+      }
+    }
+    return clone;
+  });
+
+  return { data: out, columns: newCols };
+}
+
+// ---------------------------------------------------------------------------
+// execTimeseries — pass-through stub (metrics data not simulated offline)
+// ---------------------------------------------------------------------------
+
+function execTimeseries(
+  data: DQLRecord[],
+  columns: DQLColumn[]
+): { data: DQLRecord[]; columns: DQLColumn[] } {
+  return { data, columns };
 }
 
 function execExpand(

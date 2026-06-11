@@ -135,10 +135,18 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
       args.field = rest.split(",")[0].trim();
       break;
     case "parse": {
-      const parseMatch = rest.match(/^([A-Za-z_][A-Za-z0-9_]*),\s*"(.+?)"/);
-      if (parseMatch) {
-        args.field = parseMatch[1];
-        args.pattern = parseMatch[2];
+      // Try quoted pattern first: parse field, "pattern"
+      const parseQuoted = rest.match(/^([A-Za-z_][A-Za-z0-9_]*),\s*"(.+?)"/);
+      if (parseQuoted) {
+        args.field = parseQuoted[1];
+        args.pattern = parseQuoted[2];
+        break;
+      }
+      // Unquoted pattern: parse field, JSON:alias  |  parse field, KVP:alias  |  parse field, TYPE:name ...
+      const parseUnquoted = rest.match(/^([A-Za-z_][A-Za-z0-9_]*),\s*(.+)/);
+      if (parseUnquoted) {
+        args.field = parseUnquoted[1];
+        args.pattern = parseUnquoted[2].trim();
       }
       break;
     }
@@ -158,6 +166,21 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
       args.raw = rest;
       break;
     }
+    case "lookup": {
+      // lookup sourceField:fieldName, lookupField:fieldName [, prefix:value]
+      const sfMatch = rest.match(/\bsourceField\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)/i);
+      if (sfMatch) args.sourceField = sfMatch[1];
+      const lfMatch = rest.match(/\blookupField\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)/i);
+      if (lfMatch) args.lookupField = lfMatch[1];
+      const prefixMatch = rest.match(/\bprefix\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)/i);
+      if (prefixMatch) args.prefix = prefixMatch[1];
+      // args.records is left unpopulated — scenarios pre-seed it
+      args.raw = rest;
+      break;
+    }
+    case "timeseries":
+      args.raw = rest;
+      break;
     case "data":
       args.raw = rest;
       break;
