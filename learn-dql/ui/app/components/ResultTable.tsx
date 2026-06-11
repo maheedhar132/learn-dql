@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { DataTable } from "@dynatrace/strato-components-preview/tables";
-import { Paragraph, Text } from "@dynatrace/strato-components/typography";
+import { Paragraph, Text, Code } from "@dynatrace/strato-components/typography";
 import { Flex, Surface } from "@dynatrace/strato-components/layouts";
 import { Button } from "@dynatrace/strato-components/buttons";
+import { Chip } from "@dynatrace/strato-components/content";
 import {
   CopyIcon,
   ArrowSmallUpIcon,
@@ -15,6 +16,7 @@ import {
   WrapTextOffIcon,
   ViewOffIcon,
   FilterIcon,
+  DownloadIcon,
 } from "@dynatrace/strato-icons";
 import type { DQLRecord, DQLColumn } from "../lib/types/dql";
 
@@ -36,7 +38,6 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 function display(fieldName: string, value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") {
-    // Format ISO timestamps like DT Notebooks: "18/05/2026, 13:27:41"
     if (ISO_RE.test(value)) {
       const d = new Date(value);
       if (!isNaN(d.getTime())) return d.toLocaleString("en-GB");
@@ -45,6 +46,36 @@ function display(fieldName: string, value: unknown): string {
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+// Infer a short type label for a column based on sample values
+function colTypeLabel(col: DQLColumn, records: DQLRecord[]): string {
+  const sample = records.find((r) => r[col.name] != null)?.[col.name];
+  if (sample == null) return "string";
+  if (typeof sample === "boolean") return "boolean";
+  if (typeof sample === "number") return Number.isInteger(sample) ? "long" : "double";
+  if (typeof sample === "string" && ISO_RE.test(sample)) return "timestamp";
+  return "string";
+}
+
+// ─── Download CSV ─────────────────────────────────────────────────────────────
+
+function exportCSV(records: DQLRecord[], columns: DQLColumn[]) {
+  const header = columns.map((c) => JSON.stringify(c.name)).join(",");
+  const rows = records.map((r) =>
+    columns.map((c) => {
+      const v = r[c.name];
+      return v == null ? "" : JSON.stringify(String(v));
+    }).join(","),
+  );
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "query-result.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Menu primitives ────────────────────────────────────────────────────────
@@ -114,11 +145,13 @@ function CellValueMenu({
   rawValue,
   displayValue,
   onQueryModify,
+  isNull: isNullVal,
 }: {
   fieldName: string;
   rawValue: unknown;
   displayValue: string;
   onQueryModify?: ResultTableProps["onQueryModify"];
+  isNull: boolean;
 }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const close = () => setAnchor(null);
@@ -136,13 +169,21 @@ function CellValueMenu({
 
   return (
     <span
-      style={{ cursor: "pointer", display: "inline-block", width: "100%" }}
+      style={{
+        cursor: "pointer",
+        display: "inline-block",
+        width: "100%",
+        color: isNullVal ? "rgba(127,127,127,0.45)" : undefined,
+        fontStyle: isNullVal ? "italic" : undefined,
+        fontFamily: "var(--dt-font-mono, monospace)",
+        fontSize: "0.8125rem",
+      }}
       onClick={(e) => {
         e.stopPropagation();
         setAnchor(anchor ? null : { x: e.clientX, y: e.clientY });
       }}
     >
-      {displayValue}
+      {isNullVal ? "null" : displayValue}
       {anchor && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 998 }} onClick={(e) => { e.stopPropagation(); close(); }} />
@@ -166,15 +207,15 @@ function CellValueMenu({
             {onQueryModify && (
               <>
                 <MenuDivider />
-                <MenuSection label="Add command to query" />
+                <MenuSection label="Add to query" />
                 <MenuItem
                   icon={<FilterIcon size={16} />}
-                  label="Equal"
+                  label={`Filter: ${fieldName} ${filterVal}`}
                   onClick={() => { onQueryModify("filter", fieldName, filterVal); close(); }}
                 />
                 <MenuItem
                   icon={<FilterIcon size={16} />}
-                  label="Not equal"
+                  label={`Exclude: ${fieldName} ${filterNeq}`}
                   onClick={() => { onQueryModify("filter", fieldName, filterNeq); close(); }}
                 />
               </>
@@ -190,6 +231,7 @@ function CellValueMenu({
 
 interface ColumnHeaderMenuProps {
   name: string;
+  typeLabel: string;
   colIndex: number;
   totalCols: number;
   sortState: SortState | null;
@@ -204,6 +246,7 @@ interface ColumnHeaderMenuProps {
 
 function ColumnHeaderMenu({
   name,
+  typeLabel,
   colIndex,
   totalCols,
   sortState,
@@ -221,19 +264,23 @@ function ColumnHeaderMenu({
   const isDesc = sortState?.id === name &&  sortState.desc;
 
   return (
-    <Flex alignItems="center" gap={4} style={{ position: "relative", minWidth: 0 }}>
-      <Text
-        style={{
-          fontWeight: 600,
-          fontSize: "0.8125rem",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {name}
-        {isAsc ? " ↑" : isDesc ? " ↓" : ""}
-      </Text>
+    <Flex alignItems="center" gap={4} style={{ position: "relative", minWidth: 0, width: "100%" }}>
+      <Flex flexDirection="column" style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+        <Text
+          style={{
+            fontWeight: 600,
+            fontSize: "0.8125rem",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--dt-font-mono, monospace)",
+          }}
+        >
+          {name}
+          {isAsc ? " ↑" : isDesc ? " ↓" : ""}
+        </Text>
+        <Text style={{ fontSize: "0.68rem", opacity: 0.45, lineHeight: 1 }}>{typeLabel}</Text>
+      </Flex>
 
       <Button
         variant="default"
@@ -260,7 +307,7 @@ function ColumnHeaderMenu({
               top: "100%",
               left: 0,
               zIndex: 999,
-              minWidth: "200px",
+              minWidth: "220px",
               boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
               marginTop: "4px",
               padding: "2px 0",
@@ -275,7 +322,7 @@ function ColumnHeaderMenu({
 
             <MenuDivider />
 
-            <MenuSection label="Add command to query" />
+            <MenuSection label="Sort" />
             <MenuItem
               icon={<ArrowSmallUpIcon size={16} />}
               label="Sort ascending"
@@ -288,14 +335,22 @@ function ColumnHeaderMenu({
               bold={isDesc}
               onClick={() => { onSort(name, true); close(); }}
             />
-            <MenuItem
-              icon={<GroupIcon size={16} />}
-              label="Summarize"
-              onClick={() => { onQueryModify?.("summarize", name); close(); }}
-            />
+
+            {onQueryModify && (
+              <>
+                <MenuDivider />
+                <MenuSection label="Add to query" />
+                <MenuItem
+                  icon={<GroupIcon size={16} />}
+                  label="Summarize by this field"
+                  onClick={() => { onQueryModify("summarize", name); close(); }}
+                />
+              </>
+            )}
 
             <MenuDivider />
 
+            <MenuSection label="Column" />
             <MenuItem
               icon={<ArrowSmallLeftIcon size={16} />}
               label="Move left"
@@ -310,9 +365,7 @@ function ColumnHeaderMenu({
             />
             <MenuItem icon={<PinIcon size={16} />} label="Pin left"  disabled />
             <MenuItem icon={<PinIcon size={16} />} label="Pin right" disabled />
-
             <MenuDivider />
-
             <MenuItem
               icon={lineWrap ? <WrapTextOffIcon size={16} /> : <WrapTextIcon size={16} />}
               label={lineWrap ? "Disable line wrap" : "Enable line wrap"}
@@ -343,7 +396,7 @@ export const ResultTable = ({
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set());
   const [lineWrap,   setLineWrap]   = useState(false);
 
-  // Reset layout state whenever the column set changes (new query result).
+  // Reset layout whenever the column set changes (new query result).
   useEffect(() => {
     setColOrder(columns.map((c) => c.name));
     setHiddenCols(new Set());
@@ -372,6 +425,12 @@ export const ResultTable = ({
     [colOrder, hiddenCols, columns],
   );
 
+  // Per-column type labels derived from sample data
+  const typeLabels = useMemo(
+    () => Object.fromEntries(columns.map((c) => [c.name, colTypeLabel(c, records)])),
+    [columns, records],
+  );
+
   // Client-side sort then slice.
   const data = useMemo(() => {
     let rows = records;
@@ -387,15 +446,38 @@ export const ResultTable = ({
     return rows.slice(0, maxRows);
   }, [records, sortState, maxRows]);
 
+  // Row-number prepend: add synthetic _row field
+  const numberedData = useMemo(
+    () => data.map((r, i) => ({ ...r, _row: i + 1 } as DQLRecord)),
+    [data],
+  );
+
   const colDefs = useMemo(
-    () =>
-      effectiveCols.map((c, idx) => ({
+    () => [
+      // Row-number frozen column
+      {
+        id: "_row",
+        accessor: "_row" as keyof DQLRecord,
+        label: "#",
+        header: () => (
+          <Text style={{ fontSize: "0.72rem", opacity: 0.45, userSelect: "none" }}>#</Text>
+        ),
+        cell: ({ value }: { value: unknown }) => (
+          <Text style={{ fontSize: "0.75rem", opacity: 0.4, userSelect: "none", fontFamily: "var(--dt-font-mono, monospace)" }}>
+            {String(value)}
+          </Text>
+        ),
+        width: "auto" as const,
+      },
+      // Data columns
+      ...effectiveCols.map((c, idx) => ({
         id: c.name,
         accessor: c.name as keyof DQLRecord,
         label: c.name,
         header: () => (
           <ColumnHeaderMenu
             name={c.name}
+            typeLabel={typeLabels[c.name] ?? ""}
             colIndex={idx}
             totalCols={effectiveCols.length}
             sortState={sortState}
@@ -414,48 +496,112 @@ export const ResultTable = ({
             rawValue={value}
             displayValue={display(c.name, value)}
             onQueryModify={onQueryModify}
+            isNull={value == null}
           />
         ),
         width: "auto" as const,
       })),
+    ],
     [
-      effectiveCols, sortState, lineWrap,
+      effectiveCols, sortState, lineWrap, typeLabels,
       handleSort, handleMoveLeft, handleMoveRight, handleToggleWrap, handleHide,
       onQueryModify,
     ],
   );
 
+  const visibleColCount = effectiveCols.length;
+
   if (records.length === 0) {
-    return <Flex padding={16}><Paragraph>No records.</Paragraph></Flex>;
+    return (
+      <Flex
+        flexDirection="column"
+        alignItems="center"
+        style={{ padding: "32px 16px", opacity: 0.5 }}
+        gap={8}
+      >
+        <Paragraph style={{ margin: 0 }}>No records returned.</Paragraph>
+        <Text style={{ fontSize: "0.8rem" }}>The query ran successfully but matched zero rows.</Text>
+      </Flex>
+    );
   }
 
   return (
-    <Flex flexDirection="column" gap={4}>
-      {hiddenCols.size > 0 && (
+    <Flex flexDirection="column" gap={0}>
+      {/* ── DT Notebook-style toolbar ── */}
+      <Flex
+        alignItems="center"
+        justifyContent="space-between"
+        style={{
+          padding: "6px 12px",
+          borderBottom: "1px solid rgba(127,127,127,0.15)",
+          background: "rgba(127,127,127,0.04)",
+          borderRadius: "4px 4px 0 0",
+        }}
+        gap={8}
+      >
         <Flex alignItems="center" gap={8}>
-          <Text style={{ fontSize: "0.8rem", opacity: 0.6 }}>
-            {hiddenCols.size} column{hiddenCols.size > 1 ? "s" : ""} hidden
+          <Text style={{ fontSize: "0.78rem", fontWeight: 600 }}>
+            {records.length.toLocaleString()} record{records.length !== 1 ? "s" : ""}
           </Text>
+          <Text style={{ fontSize: "0.72rem", opacity: 0.45 }}>·</Text>
+          <Text style={{ fontSize: "0.78rem", opacity: 0.7 }}>
+            {visibleColCount} field{visibleColCount !== 1 ? "s" : ""}
+          </Text>
+          {hiddenCols.size > 0 && (
+            <>
+              <Text style={{ fontSize: "0.72rem", opacity: 0.45 }}>·</Text>
+              <Button
+                variant="default"
+                onClick={() => setHiddenCols(new Set())}
+                style={{ fontSize: "0.75rem", padding: "1px 6px" }}
+              >
+                {hiddenCols.size} hidden — show all
+              </Button>
+            </>
+          )}
+        </Flex>
+        <Flex alignItems="center" gap={4}>
+          {sortState && (
+            <Chip style={{ fontSize: "0.72rem" }}>
+              Sorted: {sortState.id} {sortState.desc ? "↓" : "↑"}
+            </Chip>
+          )}
           <Button
             variant="default"
-            onClick={() => setHiddenCols(new Set())}
-            style={{ fontSize: "0.8rem", padding: "2px 8px" }}
+            onClick={() => exportCSV(records, columns)}
+            style={{ padding: "2px 8px", fontSize: "0.78rem" }}
           >
-            Show all
+            <Flex alignItems="center" gap={4}>
+              <DownloadIcon size={14} />
+              Export CSV
+            </Flex>
           </Button>
         </Flex>
-      )}
+      </Flex>
+
+      {/* ── Data table ── */}
       <DataTable
-        data={data}
+        data={numberedData}
         columns={colDefs}
         fullWidth
         resizable
         lineWrap={lineWrap}
       />
+
+      {/* ── Footer ── */}
       {records.length > maxRows && (
-        <Paragraph style={{ fontSize: "0.875rem", opacity: 0.7 }}>
-          Showing first {maxRows} of {records.length} records.
-        </Paragraph>
+        <Flex
+          style={{
+            padding: "4px 12px",
+            borderTop: "1px solid rgba(127,127,127,0.15)",
+            background: "rgba(127,127,127,0.04)",
+            borderRadius: "0 0 4px 4px",
+          }}
+        >
+          <Text style={{ fontSize: "0.75rem", opacity: 0.6 }}>
+            Showing first {maxRows.toLocaleString()} of {records.length.toLocaleString()} records
+          </Text>
+        </Flex>
       )}
     </Flex>
   );

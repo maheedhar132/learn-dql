@@ -7,6 +7,7 @@ import {
   Strong,
   Code,
   Link,
+  Text,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
@@ -167,43 +168,105 @@ export const CasePlayer = () => {
         </Flex>
       </Flex>
 
+      {/* ── Lesson card ── */}
       <Surface>
-        <Flex flexDirection="column" padding={16} gap={12}>
-          <Flex alignItems="center" gap={8}>
-            <Chip>Lesson</Chip>
-            <Strong>{step.lesson}</Strong>
+        <Flex flexDirection="column" padding={20} gap={16}>
+          {/* Header row */}
+          <Flex alignItems="center" gap={8} flexWrap="wrap">
+            <Chip>{step.lesson}</Chip>
+            <Chip color="neutral">{scenario.difficulty}</Chip>
           </Flex>
-          <Paragraph style={{ lineHeight: 1.6 }}>{step.narration}</Paragraph>
-          <Paragraph><Strong>Goal: </Strong>{step.goal}</Paragraph>
+
+          {/* Narrative — primary learning text */}
+          <Flex flexDirection="column" gap={8}>
+            <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Concept
+            </Strong>
+            <Paragraph style={{ lineHeight: 1.75, margin: 0, fontSize: "0.9375rem" }}>
+              {step.narration}
+            </Paragraph>
+          </Flex>
+
+          {/* Reference query with syntax annotation */}
           {isDqlStep && (
-            <Flex flexDirection="column" gap={6}>
-              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Reference query — try writing it yourself, or use Fill example:
+            <Flex
+              flexDirection="column"
+              gap={8}
+              style={{
+                borderLeft: "3px solid rgba(100,160,255,0.4)",
+                paddingLeft: 14,
+              }}
+            >
+              <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Reference Query
+              </Strong>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.65, margin: 0, lineHeight: 1.4 }}>
+                This is the target query for this step. Try to write it from scratch, then use{" "}
+                <Strong>Fill example</Strong> if you get stuck.
               </Paragraph>
-              <Code>{pipelineToQuery(step.expectedPipeline)}</Code>
+              <Code style={{ display: "block", whiteSpace: "pre", overflowX: "auto", fontSize: "0.875rem", lineHeight: 1.6 }}>
+                {pipelineToQuery(step.expectedPipeline)}
+              </Code>
             </Flex>
           )}
+
+          {/* Concept-only reference query */}
           {!isDqlStep && step.referenceQuery && (
-            <Flex flexDirection="column" gap={6}>
-              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Reference query (conceptual — not validated in the offline engine):
+            <Flex
+              flexDirection="column"
+              gap={8}
+              style={{
+                borderLeft: "3px solid rgba(180,120,255,0.4)",
+                paddingLeft: 14,
+              }}
+            >
+              <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Real-World DQL Pattern
+              </Strong>
+              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.65, margin: 0 }}>
+                This is how the query would look in a live Dynatrace environment. It is shown for reference only — the offline engine cannot execute live subqueries.
               </Paragraph>
-              <Code>{step.referenceQuery}</Code>
+              <Code style={{ display: "block", whiteSpace: "pre", overflowX: "auto", fontSize: "0.875rem", lineHeight: 1.6 }}>
+                {step.referenceQuery}
+              </Code>
             </Flex>
           )}
+
+          {/* Goal */}
+          <Flex
+            gap={8}
+            alignItems="flex-start"
+            style={{
+              background: "rgba(80,200,120,0.08)",
+              border: "1px solid rgba(80,200,120,0.2)",
+              borderRadius: 4,
+              padding: "10px 14px",
+            }}
+          >
+            <Text style={{ fontSize: "0.8rem", opacity: 0.7, flexShrink: 0, paddingTop: 2 }}>🎯</Text>
+            <Flex flexDirection="column" gap={2}>
+              <Strong style={{ fontSize: "0.8rem" }}>Your task</Strong>
+              <Paragraph style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.5 }}>{step.goal}</Paragraph>
+            </Flex>
+          </Flex>
+
+          {/* Available fields */}
           {availableFields.length > 0 && (
-            <Flex flexDirection="column" gap={6}>
-              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.6, margin: 0 }}>
-                Available fields in this dataset:
-              </Paragraph>
+            <Flex flexDirection="column" gap={8}>
+              <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Available Fields
+              </Strong>
               <Flex gap={6} flexWrap="wrap">
-                {availableFields.map((f) => <Code key={f}>{f}</Code>)}
+                {availableFields.map((f) => (
+                  <Code key={f} style={{ fontSize: "0.8rem" }}>{f}</Code>
+                ))}
               </Flex>
             </Flex>
           )}
-          <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
-            Free in-app simulation — learn without affecting your Dynatrace environment or incurring any charges.
-          </Paragraph>
+
+          <Text style={{ fontSize: "0.72rem", opacity: 0.35 }}>
+            Free in-app simulation — no Dynatrace environment required, zero DDU cost.
+          </Text>
         </Flex>
       </Surface>
 

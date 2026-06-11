@@ -249,6 +249,41 @@ function MCQPanel({
   );
 }
 
+// ─── Task card with hidden solution ──────────────────────────────────────────
+
+function TaskCard({ index, question, solution }: { index: number; question: string; solution: string }) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <Flex flexDirection="column" gap={4}>
+      <Paragraph style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>
+        {index + 1}. {question}
+      </Paragraph>
+      {revealed ? (
+        <Flex flexDirection="column" gap={4}>
+          <Code style={{ fontSize: "0.78rem", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+            {solution}
+          </Code>
+          <Button
+            variant="default"
+            onClick={() => setRevealed(false)}
+            style={{ alignSelf: "flex-start", fontSize: "0.75rem", padding: "2px 8px" }}
+          >
+            Hide solution
+          </Button>
+        </Flex>
+      ) : (
+        <Button
+          variant="default"
+          onClick={() => setRevealed(true)}
+          style={{ alignSelf: "flex-start", fontSize: "0.75rem", padding: "2px 8px" }}
+        >
+          Show solution
+        </Button>
+      )}
+    </Flex>
+  );
+}
+
 // ─── LogHuntPlayer ────────────────────────────────────────────────────────────
 
 export const LogHuntPlayer = () => {
@@ -259,6 +294,10 @@ export const LogHuntPlayer = () => {
   const [hintIndex, setHintIndex] = useState(-1);
   const [queriesRan, setQueriesRan] = useState(false);
 
+  // Reset all player-level state when the hunt changes.
+  // NOTE: QuerySandbox and MCQPanel also carry their own local state (query text,
+  // selected answer, attempts). We force-remount them via key={huntId} so React
+  // destroys and recreates those subtrees on navigation, fully clearing their state.
   useEffect(() => {
     setCaseSolved(false);
     setHintIndex(-1);
@@ -330,13 +369,14 @@ export const LogHuntPlayer = () => {
 
         <Divider />
 
-        {/* Query sandbox */}
-        <QuerySandbox sampleData={sampleData} onRun={() => setQueriesRan(true)} />
+        {/* Query sandbox — keyed by huntId so local state resets on navigation */}
+        <QuerySandbox key={huntId} sampleData={sampleData} onRun={() => setQueriesRan(true)} />
 
         <Divider />
 
-        {/* MCQ */}
+        {/* MCQ — keyed by huntId so selected/attempts/solved state resets on navigation */}
         <MCQPanel
+          key={huntId}
           mcq={scenario.mcq}
           queriesRan={queriesRan}
           onSolved={() => {
@@ -405,16 +445,12 @@ export const LogHuntPlayer = () => {
         <Surface>
           <Flex flexDirection="column" padding={16} gap={12}>
             <Strong>Investigation tasks</Strong>
-            <Flex flexDirection="column" gap={12}>
+            <Paragraph style={{ fontSize: "0.78rem", opacity: 0.55, margin: 0 }}>
+              Try to answer each question with a query before revealing the solution.
+            </Paragraph>
+            <Flex flexDirection="column" gap={16}>
               {scenario.tasks.map((task, i) => (
-                <Flex key={task.id} flexDirection="column" gap={4}>
-                  <Paragraph style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0 }}>
-                    {i + 1}. {task.question}
-                  </Paragraph>
-                  <Paragraph style={{ fontSize: "0.78rem", opacity: 0.55, margin: 0 }}>
-                    Hint: {task.solution}
-                  </Paragraph>
-                </Flex>
+                <TaskCard key={task.id} index={i} question={task.question} solution={task.solution} />
               ))}
             </Flex>
           </Flex>
