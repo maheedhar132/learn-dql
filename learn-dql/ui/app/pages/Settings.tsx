@@ -151,9 +151,9 @@ export const Settings = () => {
               <Paragraph style={{ opacity: 0.8, margin: 0, lineHeight: 1.5 }}>
                 When enabled, the app queries your connected Dynatrace environment once to discover
                 the actual field names and types used in your logs and spans. The Notebook and
-                Sandbox will then offer a <Strong>"From your environment"</Strong> toggle that
-                reshapes the seeded sample data to match your real field schema — so your practice
-                queries work with the same field names you use in production.
+                Sandbox will then show a <Strong>"From your environment"</Strong> panel
+                listing your real field names as suggestions — so you practice with the same
+                field names you use in production.
               </Paragraph>
               <Paragraph style={{ fontSize: "0.8rem", opacity: 0.55, margin: 0 }}>
                 Default: <Strong>disabled.</Strong> Only reads 50 records to detect field shapes —

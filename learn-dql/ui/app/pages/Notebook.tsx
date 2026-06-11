@@ -156,8 +156,8 @@ const DATA_SOURCES: DataSourceDef[] = [
     description: "Authentication events — logins, failures, IP addresses, attacker patterns",
     fields: [
       { name: "timestamp",   type: "datetime", example: "2024-01-15T10:23:45Z" },
-      { name: "loglevel",    type: "string",   example: "INFO · ERROR" },
-      { name: "host",        type: "string",   example: "auth-01 · auth-02" },
+      { name: "loglevel",    type: "string",   example: "INFO · WARN · ERROR · DEBUG" },
+      { name: "host",        type: "string",   example: "prod-01 … prod-05" },
       { name: "content",     type: "string",   example: "user=admin attacker_ip=… attempts=…" },
     ],
     generate: () => generateAuthLogs(1500, 22),
@@ -165,12 +165,17 @@ const DATA_SOURCES: DataSourceDef[] = [
   {
     id: "biz_events",
     label: "Business Events",
-    description: "Revenue events — orders, transactions, user journeys by product and region",
+    description: "Revenue events — orders, payments, and shipments by product and region",
     fields: [
-      { name: "timestamp",  type: "datetime", example: "2024-01-15T10:23:45Z" },
-      { name: "loglevel",   type: "string",   example: "INFO" },
-      { name: "host",       type: "string",   example: "checkout-01 · checkout-02" },
-      { name: "content",    type: "string",   example: "event=PURCHASE product=… amount=… region=…" },
+      { name: "timestamp",     type: "datetime", example: "2024-01-15T10:23:45Z" },
+      { name: "event.type",    type: "string",   example: "com.easytrade.order_confirmed · …payment_confirmed" },
+      { name: "order_id",      type: "string",   example: "ORD-10042" },
+      { name: "amount",        type: "double",   example: "474.2 · 1280.5" },
+      { name: "currency",      type: "string",   example: "USD · EUR · GBP · JPY" },
+      { name: "product",       type: "string",   example: "widget · gadget · sprocket" },
+      { name: "accountId",     type: "string",   example: "ACC-1042" },
+      { name: "region",        type: "string",   example: "na · eu · apac · latam" },
+      { name: "customer_tier", type: "string",   example: "free · pro · enterprise" },
     ],
     generate: () => generateBizEvents(1500, 66),
   },
@@ -234,8 +239,10 @@ const SAMPLE_QUERIES: Record<string, { label: string; query: string }[]> = {
     { label: "Errors by host", query: 'fetch logs\n| filter loglevel == "ERROR"\n| summarize count(), by:{host}\n| sort count desc' },
   ],
   biz_events: [
-    { label: "All events", query: "fetch logs\n| limit 20" },
-    { label: "Count by host", query: "fetch logs\n| summarize count(), by:{host}" },
+    { label: "All events", query: "fetch bizevents\n| limit 20" },
+    { label: "Revenue by region", query: "fetch bizevents\n| summarize revenue = sum(amount), by:{region}\n| sort revenue desc" },
+    { label: "Orders by event type", query: "fetch bizevents\n| summarize orders = count(), by:{event.type}\n| sort orders desc" },
+    { label: "Top products", query: "fetch bizevents\n| summarize revenue = sum(amount), orders = count(), by:{product}\n| sort revenue desc" },
   ],
 };
 
@@ -288,18 +295,33 @@ function defaultCells(): NotebookCell[] {
   ];
 }
 
-function loadCells(): NotebookCell[] {
+function loadNotebook(): { title: string | null; cells: NotebookCell[] } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as NotebookCell[];
+    if (raw) {
+      const parsed = JSON.parse(raw) as NotebookCell[] | { title?: string; cells: NotebookCell[] };
+      if (Array.isArray(parsed)) return { title: null, cells: parsed };
+      if (Array.isArray(parsed.cells)) return { title: parsed.title ?? null, cells: parsed.cells };
+    }
   } catch { /* ignore */ }
-  return defaultCells();
+  return { title: null, cells: defaultCells() };
 }
 
-function saveCells(cells: NotebookCell[]) {
+/** Strip transient state (query results, running/editing flags) before
+ *  persisting — outcomes can be thousands of rows and blow the quota. */
+function persistableCells(cells: NotebookCell[]): NotebookCell[] {
+  return cells.map((c) =>
+    c.type === "query" ? { ...c, outcome: null, running: false } : { ...c, editing: false },
+  );
+}
+
+function saveCells(cells: NotebookCell[], title?: string): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cells));
-  } catch { /* ignore */ }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ title, cells: persistableCells(cells) }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Lazy data cache (generate once per session) ──────────────────────────────
@@ -589,9 +611,19 @@ function QueryCellComponent({ cell, onUpdate, onDelete, onMoveUp, onMoveDown, is
 // ─── Notebook page ────────────────────────────────────────────────────────────
 
 export const Notebook = () => {
-  const [cells, setCells] = useState<NotebookCell[]>(loadCells);
-  const [notebookTitle, setNotebookTitle] = useState("My DQL Notebook");
+  const [initial] = useState(loadNotebook);
+  const [cells, setCells] = useState<NotebookCell[]>(initial.cells);
+  const [notebookTitle, setNotebookTitle] = useState(initial.title ?? "My DQL Notebook");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+
+  // Auto-save (debounced) so navigating away never loses work.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSaveError(!saveCells(cells, notebookTitle));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [cells, notebookTitle]);
 
   // Live-seed schema (Settings → Live Seed from Environment)
   const liveSchema = useMemo(() => {
@@ -675,15 +707,18 @@ export const Notebook = () => {
   }
 
   function save() {
-    saveCells(cells);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const ok = saveCells(cells, notebookTitle);
+    setSaveError(!ok);
+    if (ok) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   }
 
   function resetNotebook() {
     const fresh = defaultCells();
     setCells(fresh);
-    saveCells(fresh);
+    saveCells(fresh, notebookTitle);
   }
 
   return (
@@ -698,7 +733,7 @@ export const Notebook = () => {
             aria-label="Notebook title"
           />
           <Paragraph style={{ opacity: 0.55, margin: 0, fontSize: "0.85rem" }}>
-            Multi-cell DQL notebook · 8 data sources · auto-saved to browser
+            Multi-cell DQL notebook · 8 data sources · {saveError ? "⚠ save failed (storage full?)" : "auto-saves to this browser"}
           </Paragraph>
         </Flex>
         <Flex gap={8} flexWrap="wrap">

@@ -59,7 +59,7 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-1",
         title: "Look at the loglevel column",
         narration:
-          "Run `fetch logs` and look at the `loglevel` column in the result table. You'll see three values mixed together: `INFO`, `WARN`, and `ERROR`. The vast majority are `INFO` — routine messages confirming everything is working normally. They're noise during an investigation. In the next step you'll use `filter` to drop everything except the `ERROR` rows.",
+          "Run `fetch logs` and look at the `loglevel` column in the result table. You'll see four values mixed together: `INFO`, `WARN`, `ERROR`, and `DEBUG`. The vast majority are `INFO` — routine messages confirming everything is working normally. They're noise during an investigation. In the next step you'll use `filter` to drop everything except the `ERROR` rows.",
         lesson: "Every Query Starts with fetch",
         goal: "Fetch the logs and observe the loglevel column — notice the mix of INFO, WARN, and ERROR values.",
         hint: "Just 'fetch logs'.",
@@ -142,7 +142,7 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-1",
         title: "Look at the host column",
         narration:
-          "Run the ERROR filter and look at the `host` column. You'll see several different hostnames — things like `host-01`, `host-02`, `host-03`. Each row belongs to a specific host. Right now you have one row per error event, which makes it impossible to see which host is generating the most errors at a glance. In the next step you'll group these rows by host and count them separately.",
+          "Run the ERROR filter and look at the `host` column. You'll see several different hostnames — `app-01` through `app-06`. Each row belongs to a specific host. Right now you have one row per error event, which makes it impossible to see which host is generating the most errors at a glance. In the next step you'll group these rows by host and count them separately.",
         lesson: "Explore the host Field",
         goal: "Fetch ERROR logs and look at the host column — notice how many different hosts appear.",
         hint: 'fetch logs | filter loglevel == "ERROR"',
@@ -246,7 +246,7 @@ export const onboardingScenarios: Scenario[] = [
         id: "step-1",
         title: "See the IP buried in the content field",
         narration:
-          "Fetch the auth logs and look at the `content` column. You'll see entries like `Failed login from IP:192.168.1.45 for user:admin`. The IP address is buried inside that text string — it's not in its own column. Because of that, you can't write `filter attacker_ip == \"1.2.3.4\"`, you can't group by IP, and you can't count attacks per source. The data is there, but it's trapped. In the next step you'll use `parse` to free it into its own queryable field.",
+          "Fetch the auth logs and look at the `content` column. You'll see entries like `Login failed for user=admin from attacker_ip=192.168.1.45 attempts=5`. The IP address is buried inside that text string — it's not in its own column. Because of that, you can't write `filter attacker_ip == \"1.2.3.4\"`, you can't group by IP, and you can't count attacks per source. The data is there, but it's trapped. In the next step you'll use `parse` to free it into its own queryable field.",
         lesson: "Explore Raw Log Content",
         goal: "Fetch auth logs and look at the content column — find the IP address embedded in the text.",
         hint: "fetch logs",

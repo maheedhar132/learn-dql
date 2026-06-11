@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
@@ -65,8 +66,17 @@ const EXAMPLE_QUERIES = [
 ];
 
 export const Sandbox = () => {
-  const [query, setQuery] = useState(DEFAULT_QUERY);
+  // A query handed over from the Codex "Try in Sandbox" button takes precedence.
+  const location = useLocation();
+  const incomingQuery = (location.state as { query?: string } | null)?.query;
+  const [query, setQuery] = useState(incomingQuery || DEFAULT_QUERY);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+
+  // Run the handed-over query immediately so the user lands on a live result.
+  useEffect(() => {
+    if (incomingQuery) setOutcome(runQuery(incomingQuery, SAMPLE));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingQuery]);
 
   // Live-seed schema from Settings (if the user enabled it and fetched their env schema)
   const liveSchema = useMemo(() => {

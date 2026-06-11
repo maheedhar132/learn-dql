@@ -10,6 +10,9 @@ export interface QueryEntry {
   query: string;
   explanation: string;
   xpReward: number;
+  /** True when the query needs a live Grail tenant (dt.system/dt.entity tables,
+   *  sub-query joins, or functions the offline engine doesn't simulate). */
+  liveOnly?: boolean;
 }
 
 export const QUERY_LIBRARY: QueryEntry[] = [
@@ -56,6 +59,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 20`,
     explanation: "Filters database logs and parses out query duration. The DURATION type automatically handles millisecond values. Results are sorted by slowest query first.",
     xpReward: 10,
+    liveOnly: true,
   },
   {
     id: "q-log-004",
@@ -130,6 +134,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 50`,
     explanation: "Filters spans exceeding 1 second latency. Spans represent individual operations in distributed traces.",
     xpReward: 5,
+    liveOnly: true,
   },
   {
     id: "q-span-002",
@@ -230,6 +235,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | fields timestamp, span.name, content, service.name`,
     explanation: "Uses the join command to correlate error logs with their corresponding spans using the shared trace_id field. Essential for root cause analysis.",
     xpReward: 15,
+    liveOnly: true,
   },
   {
     id: "q-join-002",
@@ -244,6 +250,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 100`,
     explanation: "The append command unions two datasets. This is useful for creating timelines that mix logs and events (e.g., 'did a deployment coincide with errors?').",
     xpReward: 10,
+    liveOnly: true,
   },
 
   // Aggregation patterns
@@ -291,6 +298,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | fields timestamp, user_id, action`,
     explanation: "Uses jsonPath() to extract nested values from JSON log content. The isNotNull filter removes rows where parsing failed.",
     xpReward: 10,
+    liveOnly: true,
   },
   {
     id: "q-parse-002",
@@ -325,6 +333,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 20`,
     explanation: "dt.system.query_executions records every DQL query execution in your tenant. This query finds the most expensive queries by total bytes scanned — the key DDU cost driver. Free to run because dt.system.* tables don't consume DDU.",
     xpReward: 10,
+    liveOnly: true,
   },
   {
     id: "q-sys-002",
@@ -338,6 +347,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | sort timestamp desc`,
     explanation: "Quickly identify which queries are failing and who ran them. Useful for debugging query syntax errors or permission issues before investing time in optimization.",
     xpReward: 5,
+    liveOnly: true,
   },
   {
     id: "q-sys-003",
@@ -356,6 +366,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 20`,
     explanation: "Breaks down DQL cost by user and application context. Identifies which teams or automation jobs are the biggest consumers — useful for cost allocation and capacity planning.",
     xpReward: 10,
+    liveOnly: true,
   },
   {
     id: "q-sys-004",
@@ -371,6 +382,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     estimated_total = toLong(count() / takeAny(dt.system.sampling_ratio))`,
     explanation: "Dynatrace samples logs when ingestion volume is high. The dt.system.sampling_ratio field holds the actual ratio (0.0–1.0). Dividing sampled counts by this ratio gives the estimated true count. Always check sampling before drawing conclusions from error counts.",
     xpReward: 15,
+    liveOnly: true,
   },
 
   // ── Entity Queries (free — entity model) ───────────────────────────────────
@@ -386,6 +398,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | sort entity.name`,
     explanation: "The dt.entity.host table is the entity model — no DDU cost. It contains the current state of all monitored hosts. arrayContains() checks if a tag is in the tags array.",
     xpReward: 5,
+    liveOnly: true,
   },
   {
     id: "q-ent-002",
@@ -399,6 +412,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | sort count desc`,
     explanation: "Groups services by technology type (Java, .NET, Node.js, etc.). The entity model is free to query and gives you a real-time inventory of your service landscape.",
     xpReward: 5,
+    liveOnly: true,
   },
   {
     id: "q-ent-003",
@@ -415,6 +429,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | sort timestamp desc`,
     explanation: "Uses lookup (not join) to enrich log records with entity metadata. lookup is more efficient than join for enrichment: it only retrieves the top match per key and has left-outer semantics by default. The 128 MB limit still applies to the lookup table.",
     xpReward: 15,
+    liveOnly: true,
   },
   {
     id: "q-ent-004",
@@ -428,6 +443,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | limit 100`,
     explanation: "Process group instances represent individual running processes. The entity model relationships (fromRelationships, toRelationships) let you navigate the topology graph without a join.",
     xpReward: 10,
+    liveOnly: true,
   },
 
   // ── Additional Parsing Patterns ─────────────────────────────────────────────
@@ -453,7 +469,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     difficulty: "advanced",
     query: `fetch logs, from: now() - 6h
 | filter log.source == "nginx-access"
-| parse content, "IPADDR:client_ip LD INT:status_code LD LONG:bytes_sent"
+| parse content, "IPADDR:client_ip LD INT:status_code LONG:bytes_sent"
 | filter status_code >= 400
 | summarize errors = count(), by: {client_ip, status_code}
 | sort errors desc`,

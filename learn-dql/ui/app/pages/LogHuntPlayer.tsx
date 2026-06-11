@@ -44,6 +44,8 @@ function QuerySandbox({
     onRun?.();
   }
 
+  useCtrlEnter(run);
+
   function applyModify(newQ: string) {
     setQuery(newQ);
     setOutcome(runQuery(newQ, sampleData as Parameters<typeof runQuery>[1]));
@@ -118,17 +120,36 @@ function useCtrlEnter(fn: () => void) {
 
 const MAX_ATTEMPTS = 3;
 
+// Persist attempt counts across remounts/navigation so revealing the answer by
+// exhausting attempts can't be reset by leaving and re-entering the hunt.
+function loadAttempts(huntId: string): number {
+  try {
+    return Number(sessionStorage.getItem(`learn-dql.hunt-attempts.${huntId}`)) || 0;
+  } catch {
+    return 0;
+  }
+}
+function saveAttempts(huntId: string, n: number): void {
+  try {
+    sessionStorage.setItem(`learn-dql.hunt-attempts.${huntId}`, String(n));
+  } catch {
+    // sessionStorage unavailable — degrade to in-memory only
+  }
+}
+
 function MCQPanel({
+  huntId,
   mcq,
   queriesRan,
   onSolved,
 }: {
+  huntId: string;
   mcq: LogHuntMCQ;
   queriesRan: boolean;
   onSolved: () => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [attempts, setAttempts] = useState(0);
+  const [attempts, setAttempts] = useState(() => loadAttempts(huntId));
   const [solved, setSolved] = useState(false);
   const exhausted = attempts >= MAX_ATTEMPTS;
   const locked = solved || exhausted;
@@ -139,7 +160,10 @@ function MCQPanel({
       setSolved(true);
       onSolved();
     } else {
-      setAttempts((n) => n + 1);
+      setAttempts((n) => {
+        saveAttempts(huntId, n + 1);
+        return n + 1;
+      });
       setSelected(null);
     }
   }
@@ -370,13 +394,14 @@ export const LogHuntPlayer = () => {
         <Divider />
 
         {/* Query sandbox — keyed by huntId so local state resets on navigation */}
-        <QuerySandbox key={huntId} sampleData={sampleData} onRun={() => setQueriesRan(true)} />
+        <QuerySandbox key={`sandbox-${huntId}`} sampleData={sampleData} onRun={() => setQueriesRan(true)} />
 
         <Divider />
 
         {/* MCQ — keyed by huntId so selected/attempts/solved state resets on navigation */}
         <MCQPanel
-          key={huntId}
+          key={`mcq-${huntId}`}
+          huntId={huntId!}
           mcq={scenario.mcq}
           queriesRan={queriesRan}
           onSolved={() => {

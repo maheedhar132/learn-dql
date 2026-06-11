@@ -33,8 +33,33 @@ function lastStage(pipeline: PipelineStage[], data: DQLRecord[]): RunOutcome {
   }
 }
 
-/** Execute a raw DQL string against sample data (offline engine). */
-export function runQuery(query: string, sampleData: DQLRecord[]): RunOutcome {
+/** Copy pre-seeded right-side records (lookup/join/append sub-query data) from
+ *  a reference pipeline into a freshly parsed user pipeline. The offline parser
+ *  cannot resolve live `[fetch …]` sub-queries, so scenarios seed the records on
+ *  the expected pipeline; the user's stage of the same command inherits them. */
+function seedSubqueryRecords(pipeline: PipelineStage[], reference?: PipelineStage[]): void {
+  if (!reference) return;
+  const SEEDABLE = new Set(["lookup", "join", "append"]);
+  for (const stage of pipeline) {
+    if (!SEEDABLE.has(stage.command)) continue;
+    const args = stage.args as Record<string, unknown>;
+    if (args.records) continue;
+    const ref = reference.find(
+      (r) => r.command === stage.command && (r.args as Record<string, unknown>).records,
+    );
+    if (ref) {
+      stage.args = { ...args, records: (ref.args as Record<string, unknown>).records };
+    }
+  }
+}
+
+/** Execute a raw DQL string against sample data (offline engine).
+ *  `reference` (optional) supplies pre-seeded sub-query records. */
+export function runQuery(
+  query: string,
+  sampleData: DQLRecord[],
+  reference?: PipelineStage[],
+): RunOutcome {
   const trimmed = query.trim();
   if (!trimmed) return { records: [], columns: [], error: "Empty query — type a DQL command to get started." };
   let pipeline: PipelineStage[];
@@ -43,6 +68,7 @@ export function runQuery(query: string, sampleData: DQLRecord[]): RunOutcome {
   } catch (e) {
     return { records: [], columns: [], error: e instanceof Error ? e.message : "Query parse error" };
   }
+  seedSubqueryRecords(pipeline, reference);
   return lastStage(pipeline, sampleData);
 }
 
@@ -65,15 +91,25 @@ function canonicalRowValues(row: DQLRecord): string {
   return JSON.stringify(Object.values(row).map((v) => JSON.stringify(v)).sort());
 }
 
-/** Order-insensitive multiset equality. Falls back to values-only comparison
- *  so different column aliases (e.g. cnt vs total) still pass. */
-export function recordsMatch(a: DQLRecord[], b: DQLRecord[]): boolean {
+export interface MatchOptions {
+  /** Compare rows in order (for lessons whose point is sorting). */
+  ordered?: boolean;
+  /** Require exact column names (for rename/projection lessons) — disables
+   *  the values-only alias fallback. */
+  strictNames?: boolean;
+}
+
+/** Multiset (or ordered-sequence) equality. By default falls back to a
+ *  values-only comparison so different column aliases (cnt vs total) pass. */
+export function recordsMatch(a: DQLRecord[], b: DQLRecord[], opts: MatchOptions = {}): boolean {
   if (a.length !== b.length) return false;
-  const sa = a.map(canonicalRow).sort();
-  const sb = b.map(canonicalRow).sort();
+  const order = (arr: string[]) => (opts.ordered ? arr : [...arr].sort());
+  const sa = order(a.map(canonicalRow));
+  const sb = order(b.map(canonicalRow));
   if (sa.every((v, i) => v === sb[i])) return true;
-  const va = a.map(canonicalRowValues).sort();
-  const vb = b.map(canonicalRowValues).sort();
+  if (opts.strictNames) return false;
+  const va = order(a.map(canonicalRowValues));
+  const vb = order(b.map(canonicalRowValues));
   return va.every((v, i) => v === vb[i]);
 }
 
@@ -94,13 +130,25 @@ function diagnoseFailure(query: string, userCount: number, expectedCount: number
   return "Record counts match but values differ — check field names and aggregation aliases.";
 }
 
+/** Derive comparison strictness from what the reference pipeline teaches. */
+function matchOptionsFor(expected: PipelineStage[]): MatchOptions {
+  return {
+    // If the lesson includes a sort, row order is the point — compare in order.
+    ordered: expected.some((s) => s.command === "sort"),
+    // If the lesson renames or projects fields, column names are the point.
+    strictNames: expected.some(
+      (s) => s.command === "fieldsRename" || s.command === "fields" || s.command === "fieldsKeep",
+    ),
+  };
+}
+
 /** Validate a learner query for a step by comparing results. */
 export function validateStep(
   query: string,
   expected: PipelineStage[],
   sampleData: DQLRecord[],
 ): ValidationResult {
-  const userOutcome = runQuery(query, sampleData);
+  const userOutcome = runQuery(query, sampleData, expected);
   const expectedOutcome = runExpected(expected, sampleData);
 
   if (userOutcome.error) {
@@ -114,15 +162,19 @@ export function validateStep(
       expectedOutcome,
     };
   }
-  const passed = recordsMatch(userOutcome.records, expectedOutcome.records);
-  return {
-    passed,
-    message: passed
-      ? "Correct — your result matches the expected output."
-      : diagnoseFailure(query, userOutcome.records.length, expectedOutcome.records.length),
-    userOutcome,
-    expectedOutcome,
-  };
+  const opts = matchOptionsFor(expected);
+  const passed = recordsMatch(userOutcome.records, expectedOutcome.records, opts);
+  let message: string;
+  if (passed) {
+    message = "Correct — your result matches the expected output.";
+  } else if (opts.ordered && recordsMatch(userOutcome.records, expectedOutcome.records, { ...opts, ordered: false })) {
+    message = "The records are right but the row order differs — check your sort field and direction.";
+  } else if (opts.strictNames && recordsMatch(userOutcome.records, expectedOutcome.records, { ...opts, strictNames: false })) {
+    message = "The values are right but the column names differ — check your rename or field projection.";
+  } else {
+    message = diagnoseFailure(query, userOutcome.records.length, expectedOutcome.records.length);
+  }
+  return { passed, message, userOutcome, expectedOutcome };
 }
 
 /** Reconstruct the reference query string from a pipeline (for "show solution"). */

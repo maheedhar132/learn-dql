@@ -22,6 +22,9 @@ import {
 import { markStepComplete } from "../lib/progress";
 import { ResultTable } from "../components/ResultTable";
 
+/** Unsuccessful attempts before the full solution is revealed. */
+const SOLUTION_AFTER = 3;
+
 export const CasePlayer = () => {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -36,17 +39,28 @@ export const CasePlayer = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [isExploration, setIsExploration] = useState(false);
+  // Support ladder: 1st failure unlocks the hint, 3rd unlocks the full solution.
+  const [failCount, setFailCount] = useState(0);
   const resultRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Reset synchronously on lesson change so the first paint of a new lesson
+  // never renders the previous lesson's step index (avoids a stale-step flash).
+  const [lastCaseId, setLastCaseId] = useState(caseId);
+  if (caseId !== lastCaseId) {
+    setLastCaseId(caseId);
     setStepIndex(0);
-  }, [caseId]);
+    setQuery("");
+    setResult(null);
+    setIsExploration(false);
+    setFailCount(0);
+  }
 
   useEffect(() => {
     setQuery("");
     setResult(null);
     setIsExploration(false);
-  }, [stepIndex, caseId]);
+    setFailCount(0);
+  }, [stepIndex]);
 
   useEffect(() => {
     if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -70,7 +84,11 @@ export const CasePlayer = () => {
     setIsExploration(false);
     const v = validateStep(q, step.expectedPipeline, step.sampleData);
     setResult(v);
-    if (v.passed) markStepComplete(scenario.id, stepIndex, scenario.steps.length);
+    if (v.passed) {
+      markStepComplete(scenario.id, stepIndex, scenario.steps.length);
+    } else {
+      setFailCount((n) => n + 1);
+    }
   }, [step, scenario, stepIndex]);
 
   useEffect(() => {
@@ -110,7 +128,7 @@ export const CasePlayer = () => {
       return;
     }
     setQuery(newQuery);
-    const outcome = runQuery(newQuery, step.sampleData);
+    const outcome = runQuery(newQuery, step.sampleData, step.expectedPipeline);
     setIsExploration(true);
     setResult({
       passed: false,
@@ -124,6 +142,10 @@ export const CasePlayer = () => {
   const isError = !!result && !result.passed && !isExploration && result.userOutcome.records.length === 0 && !!result.userOutcome.error;
   const isFailure = !!result && !result.passed && !isExploration && !isError;
   const isSuccess = !!result && result.passed && !isExploration;
+
+  // Support ladder thresholds
+  const showHint = failCount >= 1;
+  const showSolution = failCount >= SOLUTION_AFTER || isSuccess;
 
   return (
     <Flex flexDirection="column" padding={32} gap={20}>
@@ -151,10 +173,14 @@ export const CasePlayer = () => {
           {isLastStep ? (
             <Button
               variant="accent"
-              disabled={!passed || !nextScenario}
-              onClick={() => markAndAdvance(() => nextScenario && navigate(`/learn/${nextScenario.id}`))}
+              disabled={!passed}
+              onClick={() =>
+                markAndAdvance(() =>
+                  nextScenario ? navigate(`/learn/${nextScenario.id}`) : navigate("/log-hunt"),
+                )
+              }
             >
-              {nextScenario ? "Next lesson →" : "All done!"}
+              {nextScenario ? "Next lesson →" : "Finish → Log Hunt"}
             </Button>
           ) : (
             <Button
@@ -187,8 +213,41 @@ export const CasePlayer = () => {
             </Paragraph>
           </Flex>
 
-          {/* Reference query with syntax annotation */}
-          {isDqlStep && (
+          {/* Support ladder: nothing → hint (after 1 failure) → solution (after 3) */}
+          {isDqlStep && !showSolution && (
+            <Flex
+              flexDirection="column"
+              gap={8}
+              style={{
+                borderLeft: `3px solid ${showHint ? "rgba(255,200,80,0.5)" : "rgba(127,127,127,0.25)"}`,
+                paddingLeft: 14,
+              }}
+            >
+              {showHint ? (
+                <>
+                  <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    Hint
+                  </Strong>
+                  <Paragraph style={{ fontSize: "0.875rem", margin: 0, lineHeight: 1.5 }}>
+                    {step.hint}
+                  </Paragraph>
+                  {failCount < SOLUTION_AFTER && (
+                    <Paragraph style={{ fontSize: "0.75rem", opacity: 0.5, margin: 0 }}>
+                      The full solution unlocks after {SOLUTION_AFTER - failCount} more unsuccessful attempt{SOLUTION_AFTER - failCount !== 1 ? "s" : ""}.
+                    </Paragraph>
+                  )}
+                </>
+              ) : (
+                <Paragraph style={{ fontSize: "0.8rem", opacity: 0.55, margin: 0 }}>
+                  Write the query yourself using the concept above. A hint appears after your
+                  first unsuccessful attempt; the full solution unlocks after {SOLUTION_AFTER}.
+                </Paragraph>
+              )}
+            </Flex>
+          )}
+
+          {/* Full reference query — earned via the ladder (or already solved) */}
+          {isDqlStep && showSolution && (
             <Flex
               flexDirection="column"
               gap={8}
@@ -198,12 +257,8 @@ export const CasePlayer = () => {
               }}
             >
               <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Reference Query
+                Solution
               </Strong>
-              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.65, margin: 0, lineHeight: 1.4 }}>
-                This is the target query for this step. Try to write it from scratch, then use{" "}
-                <Strong>Fill example</Strong> if you get stuck.
-              </Paragraph>
               <Code style={{ display: "block", whiteSpace: "pre", overflowX: "auto", fontSize: "0.875rem", lineHeight: 1.6 }}>
                 {pipelineToQuery(step.expectedPipeline)}
               </Code>
@@ -284,7 +339,9 @@ export const CasePlayer = () => {
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
           <Flex gap={8} alignItems="center">
             <Button variant="accent" disabled={!query.trim()} onClick={() => runWithQuery(query)}>Run query</Button>
-            <Button onClick={() => { setQuery(pipelineToQuery(step.expectedPipeline)); setResult(null); setIsExploration(false); }}>Fill example</Button>
+            {showSolution && (
+              <Button onClick={() => { setQuery(pipelineToQuery(step.expectedPipeline)); setResult(null); setIsExploration(false); }}>Fill solution</Button>
+            )}
             <Button onClick={() => { setQuery(""); setResult(null); setIsExploration(false); }}>Clear</Button>
             <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>Ctrl+Enter to run</Paragraph>
           </Flex>
@@ -308,12 +365,15 @@ export const CasePlayer = () => {
                   </MessageContainer.Title>
                   <MessageContainer.Description>
                     {result.message}
+                    {!showSolution && showHint ? " Check the hint above the editor." : ""}
                   </MessageContainer.Description>
-                  <MessageContainer.Actions>
-                    <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>
-                      Fill example
-                    </Button>
-                  </MessageContainer.Actions>
+                  {showSolution && (
+                    <MessageContainer.Actions>
+                      <Button onClick={() => setQuery(pipelineToQuery(step.expectedPipeline))}>
+                        Fill solution
+                      </Button>
+                    </MessageContainer.Actions>
+                  )}
                 </MessageContainer>
               )}
 

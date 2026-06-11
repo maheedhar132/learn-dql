@@ -135,11 +135,12 @@ function execFieldsRename(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
+  // DQL semantics: fieldsRename newName = oldName
   const pairs = parseAssignments(String(args.assignments || ""));
   const out = data.map((row) => {
     const clone = { ...row };
-    for (const [oldName, newNameExpr] of pairs) {
-      const newName = newNameExpr.trim();
+    for (const [newName, oldNameExpr] of pairs) {
+      const oldName = oldNameExpr.trim();
       if (oldName in clone) {
         clone[newName] = clone[oldName];
         delete clone[oldName];
@@ -147,7 +148,7 @@ function execFieldsRename(
     }
     return clone;
   });
-  const colMap = new Map(pairs);
+  const colMap = new Map(pairs.map(([newName, oldName]) => [oldName.trim(), newName]));
   const cols = columns.map((c) =>
     colMap.has(c.name) ? { ...c, name: colMap.get(c.name)! } : c
   );
@@ -178,9 +179,18 @@ function execSort(
 }
 
 function computeAgg(aggregation: string, aggField: string, rows: DQLRecord[], condition?: string): number {
+  // percentile(field, N): the parser delivers aggField as "field, N" — split it.
+  let field = aggField;
+  let pctN = 95;
+  if (aggregation === "percentile") {
+    const parts = aggField.split(",").map((s) => s.trim());
+    field = parts[0];
+    const n = Number(parts[1]);
+    if (!isNaN(n) && n > 0 && n <= 100) pctN = n;
+  }
   const nums = rows
     .filter((r) => !condition || evaluateCondition(condition, r))
-    .map((r) => Number(r[aggField] ?? 0));
+    .map((r) => Number(r[field] ?? 0));
   if (aggregation === "count")   return condition ? nums.length : rows.length;
   if (aggregation === "sum")     return nums.reduce((a, b) => a + b, 0);
   if (aggregation === "avg")     return nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
@@ -191,8 +201,12 @@ function computeAgg(aggregation: string, aggField: string, rows: DQLRecord[], co
     const m = Math.floor(s.length / 2);
     return s.length % 2 !== 0 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
-  if (aggregation === "percentile") return nums.length > 0 ? nums.sort((a, b) => a - b)[Math.floor(nums.length * 0.95)] : 0;
-  if (aggregation === "countdistinct") return new Set(rows.map((r) => r[aggField])).size;
+  if (aggregation === "percentile") {
+    if (nums.length === 0) return 0;
+    const s = [...nums].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.floor(s.length * (pctN / 100)))];
+  }
+  if (aggregation === "countdistinct") return new Set(rows.map((r) => r[field])).size;
   if (aggregation === "countif") return rows.filter((r) => evaluateCondition(aggField, r)).length;
   return 0;
 }
@@ -739,6 +753,30 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
       case "isnull":        return args[0] == null;
       case "isnotnull":     return args[0] != null;
       case "isempty":       return s0 === "";
+      // Time functions
+      case "gethour": {
+        const d = new Date(s0);
+        return isNaN(d.getTime()) ? null : d.getUTCHours();
+      }
+      case "getminute": {
+        const d = new Date(s0);
+        return isNaN(d.getTime()) ? null : d.getUTCMinutes();
+      }
+      case "getdayofweek": {
+        const d = new Date(s0);
+        return isNaN(d.getTime()) ? null : d.getUTCDay();
+      }
+      case "formattimestamp": {
+        const d = new Date(s0);
+        return isNaN(d.getTime()) ? s0 : d.toISOString().replace("T", " ").replace(/\.\d+Z$/, "");
+      }
+      // Arrays
+      case "arraycontains": {
+        return Array.isArray(args[0]) && (args[0] as unknown[]).map(String).includes(String(args[1] ?? ""));
+      }
+      case "arraysize": {
+        return Array.isArray(args[0]) ? (args[0] as unknown[]).length : 0;
+      }
     }
   }
 
@@ -840,16 +878,16 @@ export function evaluateCondition(condition: string, row: DQLRecord): boolean {
       case "isnotnull":  return row[field] != null;
       case "in": {
         const rest = rawArgs.slice(rawArgs.indexOf(",") + 1).trim();
-        const items = rest.replace(/^array\(/, "").replace(/\)$/, "").split(",").map((s) => {
-          const t = s.trim();
-          return (t.startsWith('"') || t.startsWith("'")) ? t.slice(1, -1) : t;
-        });
-        return items.includes(String(row[field] ?? ""));
+        return parseInList(rest).includes(String(row[field] ?? ""));
+      }
+      case "arraycontains": {
+        const arr = row[field];
+        return Array.isArray(arr) && arr.map(String).includes(String(args[1] ?? ""));
       }
     }
   }
 
-  const m = cond.match(/^(.+?)\s*(==|!=|~>|~<|>=|<=|>|<|~|in)\s*(.+)$/);
+  const m = cond.match(/^(.+?)\s*(==|!=|~>|~<|>=|<=|>|<|~|\bin\b)\s*(.+)$/);
   if (!m) {
     // Try evaluating as a boolean expression directly
     const val = evaluateExpression(condition, row);
@@ -878,15 +916,27 @@ export function evaluateCondition(condition: string, row: DQLRecord): boolean {
       return l.includes(r);
     }
     case "in": {
-      const vals = String(rightVal)
-        .replace(/array\((.*)\)/, "$1")
-        .split(",")
-        .map((s) => s.trim().replace(/^"|"$/g, ""));
-      return vals.includes(String(leftVal));
+      // Operate on the raw right side: ("a", "b") or array("a", "b") or {a, b}
+      return parseInList(rightRaw).includes(String(leftVal));
     }
     default:
       return false;
   }
+}
+
+/** Parse an in-list: ("a", "b"), array("a", "b"), or {a, b} → string items. */
+function parseInList(raw: string): string[] {
+  let inner = raw.trim();
+  inner = inner.replace(/^array\s*\(/i, "(");
+  if (inner.startsWith("(") && inner.endsWith(")")) inner = inner.slice(1, -1);
+  else if (inner.startsWith("{") && inner.endsWith("}")) inner = inner.slice(1, -1);
+  return splitArgs(inner).map((s) => {
+    const t = s.trim();
+    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+      return t.slice(1, -1);
+    }
+    return t;
+  });
 }
 
 function execJoin(
@@ -940,11 +990,38 @@ function execJoin(
 }
 
 function parseAssignments(str: string): [string, string][] {
+  // Split on top-level commas only (paren- and quote-aware), so function calls
+  // like concat(host, "@", loglevel) are never split mid-expression.
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  let inQuotes = false;
+  let quoteChar = "";
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (!inQuotes && (ch === '"' || ch === "'")) {
+      inQuotes = true; quoteChar = ch; cur += ch;
+    } else if (inQuotes && ch === quoteChar && str[i - 1] !== "\\") {
+      inQuotes = false; cur += ch;
+    } else if (!inQuotes && (ch === "(" || ch === "[" || ch === "{")) {
+      depth++; cur += ch;
+    } else if (!inQuotes && (ch === ")" || ch === "]" || ch === "}")) {
+      depth--; cur += ch;
+    } else if (!inQuotes && depth === 0 && ch === ",") {
+      if (cur.trim()) parts.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) parts.push(cur.trim());
+
   const pairs: [string, string][] = [];
-  const regex = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)(?=,\s*[A-Za-z_]|$)/g;
-  let m;
-  while ((m = regex.exec(str)) !== null) {
-    pairs.push([m[1].trim(), m[2].trim()]);
+  for (const part of parts) {
+    const m = part.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*([\s\S]+)$/);
+    if (m && !m[2].startsWith("=")) {
+      pairs.push([m[1].trim(), m[2].trim()]);
+    }
   }
   return pairs;
 }

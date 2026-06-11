@@ -328,7 +328,7 @@ export const scenarios: Scenario[] = [
         sampleData: generateDbLogs(250, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsRename", args: { assignments: "duration_ms = latency_ms" }, raw: "fieldsRename latency_ms = duration_ms" },
+          { id: "e2", command: "fieldsRename", args: { assignments: "latency_ms = duration_ms" }, raw: "fieldsRename latency_ms = duration_ms" },
         ],
       },
       {
@@ -405,30 +405,30 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Sum Values by Group",
         narration:
-          "`sum()` adds up all the values of a numeric field within each group. It is the go-to aggregation whenever you need a total — revenue, bytes transferred, error counts, or anything else that accumulates. At PayStream, payment amounts are embedded in the `content` field as strings, so a `fieldsAdd` step first extracts a numeric `amt` column with `toDouble()`. Once you have a proper number, `summarize total = sum(amt), by: {host}` computes the per-gateway totals finance needs.",
+          "`sum()` adds up all the values of a numeric field within each group. It is the go-to aggregation whenever you need a total — revenue, bytes transferred, error counts, or anything else that accumulates. At PayStream, payment amounts are embedded in the `content` field as `key=value` text (e.g. `txn_id=TXN-0042 amount=474.2 currency=USD …`), so a `parse` step with the KVP pattern first extracts every pair — including a numeric `amount` column. Once the number exists as a field, `summarize total = sum(amount), by: {host}` computes the per-gateway totals finance needs. This parse-then-aggregate shape is the standard way to do math on values that live inside log text.",
         lesson: "Sum Values by Group",
-        goal: "Add a numeric amt column and total it per host.",
-        hint: "fieldsAdd amt = toDouble(content) then summarize total = sum(amt), by: {host}",
+        goal: "Parse the amount out of content and total it per host.",
+        hint: 'parse content, "KVP:f" then summarize total = sum(amount), by: {host}',
         sampleData: generatePaymentLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "total", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize total = sum(amt), by: {host}" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:f" }, raw: 'parse content, "KVP:f"' },
+          { id: "e3", command: "summarize", args: { alias: "total", aggregation: "sum", aggField: "amount", by: "host" }, raw: "summarize total = sum(amount), by: {host}" },
         ],
       },
       {
         id: "step-2",
         title: "Average Values by Group",
         narration:
-          "`avg()` divides the sum of a field by the count of records in each group, giving you the mean. Where `sum()` answers 'how much in total?', `avg()` answers 'how much on average?' — a useful complement for spotting whether one gateway is processing unusually large or small transactions. At PayStream, swapping `sum()` for `avg()` in the same query shape reveals the mean transaction size each payment node is handling.",
+          "`avg()` divides the sum of a field by the count of records in each group, giving you the mean. Where `sum()` answers 'how much in total?', `avg()` answers 'how much on average?' — a useful complement for spotting whether one gateway is processing unusually large or small transactions. At PayStream, keeping the same KVP parse step and swapping `sum()` for `avg()` reveals the mean transaction size each payment node is handling.",
         lesson: "Average Values by Group",
-        goal: "Compute the average amt per host.",
-        hint: "summarize avg_amt = avg(amt), by: {host}",
+        goal: "Compute the average amount per host.",
+        hint: 'parse content, "KVP:f" then summarize avg_amt = avg(amount), by: {host}',
         sampleData: generatePaymentLogs(300, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "avg_amt", aggregation: "avg", aggField: "amt", by: "host" }, raw: "summarize avg_amt = avg(amt), by: {host}" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:f" }, raw: 'parse content, "KVP:f"' },
+          { id: "e3", command: "summarize", args: { alias: "avg_amt", aggregation: "avg", aggField: "amount", by: "host" }, raw: "summarize avg_amt = avg(amount), by: {host}" },
         ],
       },
     ],
@@ -1225,7 +1225,7 @@ export const scenarios: Scenario[] = [
           "After `summarize` produces a per-group table, `sort` ranks that table by any of its columns. Sorting the per-host error count descending puts the worst offender at position one — exactly where the on-call engineer's eyes land first. This three-stage shape (filter → summarize → sort) is the foundation of every 'top N problems' query in DQL, and at SecureBank it turns raw auth logs into an actionable priority list in seconds.",
         lesson: "Sort Aggregated Results",
         goal: "Produce the per-host error counts ordered worst-first.",
-        hint: "...summarize errors = count(), by: {host then sort errors desc}",
+        hint: "summarize errors = count(), by: {host} | sort errors desc",
         sampleData: generateAuthLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1363,7 +1363,7 @@ export const scenarios: Scenario[] = [
           "A full performance profile combines count (how often), average (typical cost), and max (worst case) in a single `summarize`, then ranks the result by the metric that matters most for the investigation. At DataForge, sorting by `max_ms desc` surfaces the host whose single worst query was the most damaging — the host most likely to have caused a user-visible timeout. This four-stage pipeline (fetch → filter → summarize → sort) is the complete shape of an advanced DQL performance query.",
         lesson: "Multi-Aggregation with Ranking",
         goal: "Per host, compute count/avg/max of duration_ms for slow non-debug queries, ranked by max_ms.",
-        hint: "...summarize n=count(), avg_ms=avg(duration_ms), max_ms=max(duration_ms), by: {host then sort max_ms desc}",
+        hint: "summarize n = count(), avg_ms = avg(duration_ms), max_ms = max(duration_ms), by: {host} | sort max_ms desc",
         sampleData: generateDbLogs(400, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1441,7 +1441,7 @@ export const scenarios: Scenario[] = [
           "With the attack population confirmed, the final step is to quantify the blast radius: how many admin-targeted failures occurred per host, and which host bore the brunt of the attack? `summarize hits = count(), by: {host}` produces the per-host count, and `sort hits desc` ranks them with the most-attacked host at the top. This is the actionable output SecureBank's incident responders need — a prioritized list of which systems to lock down first.",
         lesson: "Rank Hosts by Failure Count",
         goal: "Per host, count admin-targeted ERROR logins, ranked worst-first.",
-        hint: '...filter contains(content, "user=admin") then summarize hits = count(), by: {host then sort hits desc}',
+        hint: 'filter contains(content, "user=admin") | summarize hits = count(), by: {host} | sort hits desc',
         sampleData: generateAuthLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1484,7 +1484,7 @@ export const scenarios: Scenario[] = [
           "Counting errors per host and sorting descending answers 'where should we look first?' in an incident. The host with the highest error count is the epicenter — the machine most likely causing or experiencing the storm. At CloudScale, this query runs in the first minutes of an incident to give the on-call engineer a starting point. It transforms a fleet-wide alarm into a specific host name and a specific number to communicate in the incident channel.",
         lesson: "Rank Hosts by Error Count",
         goal: "Per host, count ERROR records, ranked worst-first.",
-        hint: 'filter loglevel == "ERROR" then summarize errors = count(), by: {host then sort errors desc}',
+        hint: 'filter loglevel == "ERROR" | summarize errors = count(), by: {host} | sort errors desc',
         sampleData: generateAppLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1568,7 +1568,7 @@ export const scenarios: Scenario[] = [
           "Sorting the profiled host table by `max_ms desc` surfaces the host whose single worst query was the most damaging — the most likely cause of the checkout timeout. The average might be acceptable on every host, but the max reveals which host is capable of producing the catastrophic outliers that users actually feel. At DataForge, this final `sort` step turns the performance profile into an actionable verdict: here is the host, here is the evidence.",
         lesson: "Sort by Worst-Case Metric",
         goal: "Rank the per-host slow-query profile by max_ms, worst-first.",
-        hint: "...summarize ... by: {host then sort max_ms desc}",
+        hint: "summarize max_ms = max(duration_ms), by: {host} | sort max_ms desc",
         sampleData: generateDbLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
@@ -1605,29 +1605,29 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Extract a Numeric Amount",
         narration:
-          "PayStream's payment logs embed transaction amounts as text inside the `content` field rather than as a dedicated numeric column. Before you can aggregate money, you have to make it a number. `fieldsAdd amt = toDouble(content)` parses the content string and produces a proper floating-point column. This extraction step is a common pattern when working with legacy log formats — the data is there, it just needs to be shaped before aggregation functions can operate on it.",
+          "PayStream's payment logs embed transaction data as `key=value` text inside the `content` field — `txn_id=TXN-0042 amount=474.2 currency=USD status=completed …` — rather than as dedicated columns. Before you can aggregate money, you have to extract it. `parse content, \"KVP:f\"` scans each record's content for key=value tokens and adds every key as a real field, automatically converting numeric values like `amount` into numbers. This extraction step is the standard pattern for legacy log formats — the data is there, it just needs to be parsed before aggregation functions can operate on it.",
         lesson: "Extract a Numeric Amount",
-        goal: "Add a numeric amt column derived from content.",
-        hint: "fieldsAdd amt = toDouble(content)",
+        goal: "Parse content so amount becomes a numeric field.",
+        hint: 'parse content, "KVP:f"',
         sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:f" }, raw: 'parse content, "KVP:f"' },
         ],
       },
       {
         id: "step-2",
         title: "Total Revenue by Gateway",
         narration:
-          "With a numeric `amt` column available, `summarize revenue = sum(amt), by: {host}` computes the total transaction value processed by each payment gateway. The `host` field in PayStream's payment logs identifies which gateway handled the transaction. This is the per-gateway revenue breakdown that finance uses to reconcile end-of-day takings — if the sum doesn't match the expected total, the discrepancy points to a specific gateway as the source of missing transactions.",
+          "With the parsed `amount` field available, `summarize revenue = sum(amount), by: {host}` computes the total transaction value processed by each payment gateway. The `host` field in PayStream's payment logs identifies which gateway handled the transaction. This is the per-gateway revenue breakdown that finance uses to reconcile end-of-day takings — if the sum doesn't match the expected total, the discrepancy points to a specific gateway as the source of missing transactions.",
         lesson: "Total Revenue by Gateway",
-        goal: "Sum amt grouped by host.",
-        hint: "fieldsAdd amt = toDouble(content) then summarize revenue = sum(amt), by: {host}",
+        goal: "Sum the parsed amount grouped by host.",
+        hint: 'parse content, "KVP:f" then summarize revenue = sum(amount), by: {host}',
         sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: {host}" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:f" }, raw: 'parse content, "KVP:f"' },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amount", by: "host" }, raw: "summarize revenue = sum(amount), by: {host}" },
         ],
       },
       {
@@ -1637,12 +1637,12 @@ export const scenarios: Scenario[] = [
           "Sorting the per-gateway revenue table descending puts the highest-earning gateway at the top of the reconciliation report. This ranking matters for two reasons: it establishes the expected contribution of each gateway, and it makes anomalies obvious — a gateway that processed far less revenue than usual in a given period stands out immediately in a sorted list. At PayStream, this final `sort revenue desc` turns a raw aggregation into an executive-ready report.",
         lesson: "Rank Gateways by Revenue",
         goal: "Per-host revenue, ranked highest-first.",
-        hint: "...summarize revenue = sum(amt), by: {host then sort revenue desc}",
+        hint: 'parse content, "KVP:f" | summarize revenue = sum(amount), by: {host} | sort revenue desc',
         sampleData: generatePaymentLogs(500, 1),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "fieldsAdd", args: { assignments: "amt = toDouble(content)" }, raw: "fieldsAdd amt = toDouble(content)" },
-          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amt", by: "host" }, raw: "summarize revenue = sum(amt), by: {host}" },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "KVP:f" }, raw: 'parse content, "KVP:f"' },
+          { id: "e3", command: "summarize", args: { alias: "revenue", aggregation: "sum", aggField: "amount", by: "host" }, raw: "summarize revenue = sum(amount), by: {host}" },
           { id: "e4", command: "sort", args: { field: "revenue", direction: "desc" }, raw: "sort revenue desc" },
         ],
       },
@@ -1817,8 +1817,10 @@ export const scenarios: Scenario[] = [
             args: {
               kind: "inner",
               on: "host",
+              // Must match generateAppLogs hostnames (app-01…app-06); app-06 is
+              // deliberately missing so the inner join visibly drops its rows.
               records: (() => {
-                const hosts = ["host-01", "host-02", "host-03", "host-04", "host-05"];
+                const hosts = ["app-01", "app-02", "app-03", "app-04", "app-05"];
                 const tiers = ["gold", "silver", "bronze", "gold", "silver"];
                 return hosts.map((h, i) => ({ host: h, service_tier: tiers[i] }));
               })(),
@@ -2205,8 +2207,8 @@ export const scenarios: Scenario[] = [
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
           { id: "e2", command: "parse", args: { field: "content", pattern: "JSON:event" }, raw: 'parse content, "JSON:event"' },
-          { id: "e3", command: "filter", args: { condition: 'loglevel == "ERROR"' }, raw: 'filter loglevel == "ERROR"' },
-          { id: "e4", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "host" }, raw: "summarize count(), by: {host}" },
+          { id: "e3", command: "filter", args: { condition: 'level == "ERROR"' }, raw: 'filter level == "ERROR"' },
+          { id: "e4", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "service" }, raw: "summarize count(), by: {service}" },
         ],
       },
     ],
@@ -2225,14 +2227,14 @@ export const scenarios: Scenario[] = [
         id: "step-1",
         title: "Extract IP and status with typed capture groups",
         narration:
-          "DQL's `parse` command supports typed tokens that match and coerce specific value shapes. `IPADDR:client_ip` matches a dotted-quad IPv4 address and assigns it to `client_ip`. `INT:status` matches an integer and stores it as a number (not a string), enabling numeric comparisons like `filter status >= 400`. The token `LD` (literal delimiter) is a wildcard that skips any characters between the parts you care about — it is the 'go to the next thing' instruction. For WebGrid's Nginx access logs formatted as `IP LD STATUS LD BYTES`, this single parse line extracts three structured fields from a free-text line.",
+          "DQL's `parse` command supports typed tokens that match and coerce specific value shapes. `IPADDR:client_ip` matches a dotted-quad IPv4 address and assigns it to `client_ip`. `INT:status` matches an integer and stores it as a number (not a string), enabling numeric comparisons like `filter status >= 400`. The token `LD` (literal delimiter) is a wildcard that skips any characters between the parts you care about — it is the 'go to the next thing' instruction. In WebGrid's Nginx access logs, the status code and byte count sit next to each other near the end of the line, so the pattern is `IPADDR:client_ip LD INT:status LONG:bytes` — LD skips everything between the IP and the status, and the adjacent INT/LONG tokens pick up the two space-separated numbers. One parse line extracts three structured fields from free text.",
         lesson: "Typed Tokens: IPADDR, INT, LD",
         goal: "Extract client_ip (IPADDR), status (INT), and bytes (LONG) from content.",
-        hint: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"',
+        hint: 'parse content, "IPADDR:client_ip LD INT:status LONG:bytes"',
         sampleData: generateNginxLogs(300, 22),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LD LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"' },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LONG:bytes"' },
         ],
       },
       {
@@ -2242,11 +2244,11 @@ export const scenarios: Scenario[] = [
           "After extraction, `status` is a real integer — `filter status >= 400` does a numeric comparison, not a string search. Aggregating by `client_ip` shows which IP addresses generated the most client and server errors. For WebGrid, this query is the first step in detecting scraper abuse or DDoS: IPs generating hundreds of 4xx responses per minute are candidates for rate-limiting. The combination of typed parse + numeric filter + summarize by IP is one of the most powerful patterns in web log analysis.",
         lesson: "Numeric Filter on Parsed INT Field",
         goal: "After parsing, filter status >= 400 and count errors per client IP.",
-        hint: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes" | filter status >= 400 | summarize errors = count(), by: {client_ip} | sort errors desc',
+        hint: 'parse content, "IPADDR:client_ip LD INT:status LONG:bytes" | filter status >= 400 | summarize errors = count(), by: {client_ip} | sort errors desc',
         sampleData: generateNginxLogs(300, 22),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LD LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LD LONG:bytes"' },
+          { id: "e2", command: "parse", args: { field: "content", pattern: "IPADDR:client_ip LD INT:status LONG:bytes" }, raw: 'parse content, "IPADDR:client_ip LD INT:status LONG:bytes"' },
           { id: "e3", command: "filter", args: { condition: "status >= 400" }, raw: "filter status >= 400" },
           { id: "e4", command: "summarize", args: { alias: "errors", aggregation: "count", aggField: "", by: "client_ip" }, raw: "summarize errors = count(), by: {client_ip}" },
           { id: "e5", command: "sort", args: { field: "errors", direction: "desc" }, raw: "sort errors desc" },
@@ -2408,13 +2410,29 @@ export const scenarios: Scenario[] = [
     title: "Array Expansion and Deduplication",
     company: "TagForge",
     briefing:
-      "TagForge logs events with a `tags` array field. Use expand to flatten arrays into rows, then countDistinct to measure cardinality, and time functions to detect weekly patterns.",
+      "TagForge events carry a `tags` array field. Use expand to flatten arrays into rows, countDistinct to measure cardinality, and time functions to find hourly activity patterns.",
     difficulty: "Advanced",
     track: "dql",
     tier: "free",
     steps: [
       {
         id: "step-1",
+        title: "Expand an array into rows",
+        narration:
+          "Some fields hold arrays rather than single values — a `tags` field like [\"critical\", \"deployment\"] is one record carrying two tags. You cannot group by an array directly: the whole array would form a single group key. The `expand` command flattens arrays into rows — one output row per array element, with all other fields duplicated. After `expand tags`, a record tagged [\"critical\", \"deployment\"] becomes two records, one with `tags = \"critical\"` and one with `tags = \"deployment\"`. Now a `summarize count(), by: {tags}` counts each individual tag. At TagForge, this is how the platform team measures which tags are actually in use across all events. Records without a tags array pass through unchanged.",
+        lesson: "expand — Flatten Arrays into Rows",
+        goal: "Expand the tags array, then count events per individual tag.",
+        hint: "expand tags | summarize count(), by: {tags} | sort count desc",
+        sampleData: generateEventsWithTags(300, 19),
+        expectedPipeline: [
+          { id: "e1", command: "fetch", args: { source: "events" }, raw: "fetch events" },
+          { id: "e2", command: "expand", args: { field: "tags" }, raw: "expand tags" },
+          { id: "e3", command: "summarize", args: { alias: "count", aggregation: "count", aggField: "", by: "tags" }, raw: "summarize count(), by: {tags}" },
+          { id: "e4", command: "sort", args: { field: "count", direction: "desc" }, raw: "sort count desc" },
+        ],
+      },
+      {
+        id: "step-2",
         title: "Count distinct values with countDistinct",
         narration:
           "Sometimes you need to know 'how many unique values exist?' rather than 'how many records are there?' For example: 'how many distinct hosts logged an error today?' is a cardinality question. `summarize countDistinct(host)` gives you the count of unique values in a field across all records. This is different from `count()` — if `host-01` logged 50 errors, `count()` gives 50 but `countDistinct(host)` counts it as 1. TagForge uses this to measure how many unique users performed an action in a given period — the cardinality of the `user` field is the metric that matters for license compliance.",
@@ -2428,7 +2446,7 @@ export const scenarios: Scenario[] = [
         ],
       },
       {
-        id: "step-2",
+        id: "step-3",
         title: "Bucket events by hour of day",
         narration:
           "DQL's `getHour(timestamp)` extracts the hour component (0–23) from a timestamp. Using it in a `fieldsAdd` step creates a derived column that can then be used in `summarize ... by: {hour}` to produce an hourly breakdown. This pattern is essential for finding time-of-day patterns: peak error hours, off-hours access by privileged accounts, or request volume by timezone. TagForge's security team runs this query daily to detect anomalous activity outside business hours (typically anything before hour 8 or after hour 18 in their local timezone is flagged for review).",

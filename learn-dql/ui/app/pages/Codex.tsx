@@ -72,6 +72,9 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
             {FREE_CATEGORIES.has(entry.category) && (
               <Chip color="success">Free</Chip>
             )}
+            {entry.liveOnly && (
+              <Chip color="warning">Live tenant</Chip>
+            )}
           </Flex>
         </Flex>
 
@@ -117,9 +120,15 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
           <Paragraph style={{ margin: 0, fontSize: "0.75rem", opacity: 0.5 }}>
             +{entry.xpReward} XP
           </Paragraph>
-          <Button variant="default" onClick={onTryInSandbox}>
-            Try in Sandbox →
-          </Button>
+          {entry.liveOnly ? (
+            <Paragraph style={{ margin: 0, fontSize: "0.78rem", opacity: 0.55 }}>
+              Runs in a live Dynatrace tenant — copy into a Notebook there
+            </Paragraph>
+          ) : (
+            <Button variant="default" onClick={onTryInSandbox}>
+              Try in Sandbox →
+            </Button>
+          )}
         </Flex>
       </Flex>
     </Surface>
@@ -249,7 +258,7 @@ export const Codex = () => {
             <QueryCard
               key={entry.id}
               entry={entry}
-              onTryInSandbox={() => navigate("/sandbox")}
+              onTryInSandbox={() => navigate("/sandbox", { state: { query: entry.query } })}
             />
           ))}
         </Grid>

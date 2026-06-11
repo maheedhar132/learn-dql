@@ -1,6 +1,8 @@
 import { Page } from "@dynatrace/strato-components-preview/layouts";
 import React from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, Link as RouterLink } from "react-router-dom";
+import { Flex } from "@dynatrace/strato-components/layouts";
+import { Heading, Paragraph, Link } from "@dynatrace/strato-components/typography";
 import { Header } from "./components/Header";
 import { Home } from "./pages/Home";
 import { Learn } from "./pages/Learn";
@@ -11,6 +13,14 @@ import { LogHuntPlayer } from "./pages/LogHuntPlayer";
 import { Notebook } from "./pages/Notebook";
 import { Codex } from "./pages/Codex";
 import { Settings } from "./pages/Settings";
+
+const NotFound = () => (
+  <Flex flexDirection="column" padding={48} gap={12} alignItems="center">
+    <Heading level={2}>Page not found</Heading>
+    <Paragraph style={{ opacity: 0.7 }}>That page doesn't exist in Learn DQL.</Paragraph>
+    <Link as={RouterLink} to="/">Back to Home</Link>
+  </Flex>
+);
 
 export const App = () => {
   return (
@@ -29,6 +39,7 @@ export const App = () => {
           <Route path="/notebook" element={<Notebook />} />
           <Route path="/codex" element={<Codex />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Page.Main>
     </Page>
