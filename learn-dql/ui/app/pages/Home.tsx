@@ -191,9 +191,9 @@ export const Home = () => {
                 <Button
                   variant="default"
                   style={{ alignSelf: "flex-start" }}
-                  onClick={() => navigate(`/log-hunt/${featuredHunt.id}`)}
+                  onClick={() => navigate("/log-hunt")}
                 >
-                  Start hunt →
+                  Browse hunts →
                 </Button>
               </>
             ) : (

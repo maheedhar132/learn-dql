@@ -90,34 +90,39 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     xpReward: 10,
   },
 
-  // Metrics
+  // Metrics — DQL uses the `timeseries` command for metric data, not `fetch metrics`.
   {
     id: "q-metric-001",
     category: "metrics",
-    title: "CPU Usage Aggregation",
-    description: "Aggregate CPU metrics by host and time.",
+    title: "CPU Usage by Host",
+    description: "Time-series CPU utilisation per host over the last hour.",
     difficulty: "simple",
-    query: `fetch metrics, from: -1h
-| filter metric.name == "cpu.usage"
-| summarize avg_cpu = avg(value), by:{host}
-| sort avg_cpu desc`,
-    explanation: "Fetches CPU usage metrics and computes the average per host. The sort puts the most loaded hosts at the top.",
+    query: `timeseries cpu_avg = avg(dt.host.cpu.usage),
+         cpu_p95 = percentile(dt.host.cpu.usage, 95),
+         from: now()-1h,
+         interval: 5m,
+         by: {host.name}`,
+    explanation: "Metrics in DQL are queried with `timeseries`, not `fetch`. The command aggregates metric data into fixed-width intervals and returns one row per dimension combination (here: per host). Each output row contains arrays of values — one element per interval bucket. You can supply multiple aggregation expressions in a single timeseries call.",
     xpReward: 5,
+    liveOnly: true,
   },
   {
     id: "q-metric-002",
     category: "metrics",
-    title: "Memory Pressure Bucketing",
-    description: "Bucket memory usage into severity bands.",
+    title: "Memory Pressure Alert",
+    description: "Find hosts where memory usage recently exceeded 80%.",
     difficulty: "intermediate",
-    query: `fetch metrics, from: -6h
-| filter metric.name == "mem.usage.percent"
-| fieldsAdd severity = if(value >= 90, "critical",
-    if(value >= 75, "warning", "normal"))
-| summarize count = count(), by:{severity, host}
-| sort severity`,
-    explanation: "Uses nested if() to categorize memory usage into severity bands, then aggregates counts per host and severity level.",
+    query: `timeseries mem_avg = avg(dt.host.memory.usage.percent),
+         from: now()-6h,
+         interval: 5m,
+         by: {host.name}
+| fieldsAdd latest = arrayLast(mem_avg)
+| filter latest > 80
+| fields host.name, latest, mem_avg
+| sort latest desc`,
+    explanation: "After `timeseries`, each row has a `mem_avg` array of bucketed values. `arrayLast()` extracts the most recent sample so you can filter on a scalar threshold. This pattern — timeseries → arrayLast → filter — is the standard DQL approach for metric alerting queries.",
     xpReward: 10,
+    liveOnly: true,
   },
 
   // Spans
