@@ -1025,7 +1025,72 @@ export function generateInfrastructureLogs(count: number, seed: number): DQLReco
   return records;
 }
 
-// ─── APM Spans / Distributed Traces ──────────────────────────────────────────
+// ─── Sandbox Spans ───────────────────────────────────────────────────────────
+// Field names match actual DQL `fetch spans` output so sandbox queries teach
+// real syntax: span.name, service.name, status.code, duration_ms (long, ms).
+// (In a live Grail environment `duration` is a native duration type that
+// supports `> 1s` syntax; the offline engine models it as a plain long.)
+export function generateSandboxSpans(count: number, seed: number): DQLRecord[] {
+  const rng = seededRandom(seed);
+  const base = new Date("2024-03-18T10:00:00Z");
+
+  const services = [
+    "api-gateway", "user-service", "order-service", "payment-service",
+    "inventory-service", "notification-service", "shipping-service", "search-service",
+  ];
+  const ops: Record<string, string[]> = {
+    "api-gateway":          ["handle_request", "auth_check", "rate_limit", "route_request"],
+    "user-service":         ["get_user", "update_user", "create_session", "validate_token"],
+    "order-service":        ["create_order", "get_order", "list_orders", "cancel_order"],
+    "payment-service":      ["charge_card", "refund", "validate_card", "get_balance"],
+    "inventory-service":    ["check_stock", "reserve_item", "release_item", "update_stock"],
+    "notification-service": ["send_email", "send_sms", "push_notification", "queue_message"],
+    "shipping-service":     ["calculate_rate", "create_shipment", "track_package", "update_address"],
+    "search-service":       ["search_products", "index_product", "suggest_autocomplete", "filter_results"],
+  };
+  const spanTypes = ["http", "db", "cache", "messaging", "internal"];
+  const dbStmts = [
+    "SELECT * FROM users WHERE id = ?",
+    "INSERT INTO orders VALUES (?)",
+    "UPDATE inventory SET quantity = ? WHERE sku = ?",
+    "SELECT o.id, o.total FROM orders o JOIN users u ON o.user_id = u.id WHERE u.email = ?",
+    "DELETE FROM sessions WHERE expires_at < NOW()",
+  ];
+
+  const records: DQLRecord[] = [];
+  let elapsed = 0;
+
+  for (let i = 0; i < count; i++) {
+    elapsed += randInt(rng, 1, 8);
+    const service = randItem(rng, services);
+    const operation = randItem(rng, ops[service]);
+    const spanType = randItem(rng, spanTypes);
+    const isError = rng() < 0.1;
+    const isSlow = !isError && rng() < 0.08;
+    const duration_ms = isError ? randInt(rng, 100, 5000) :
+                        isSlow  ? randInt(rng, 800, 3000) :
+                                  randInt(rng, 2, 300);
+    const traceId = randInt(rng, 0x10000000, 0xffffffff).toString(16)
+                  + randInt(rng, 0x10000000, 0xffffffff).toString(16);
+    const spanId = randInt(rng, 0x10000000, 0xffffffff).toString(16);
+
+    records.push({
+      timestamp: formatTimestamp(base, elapsed),
+      trace_id: traceId,
+      span_id: spanId,
+      "span.name": `${service}/${operation}`,
+      "service.name": service,
+      span_type: spanType,
+      duration_ms,
+      "status.code": isError ? "ERROR" : "OK",
+      is_error: isError,
+      db_statement: spanType === "db" ? randItem(rng, dbStmts) : null,
+      host: `${service}-pod-${randInt(rng, 1, 4)}`,
+    });
+  }
+  return records;
+}
+
 // Service-to-service calls with duration, status, errors, DB statements.
 export function generateApmSpans(count: number, seed: number): DQLRecord[] {
   const rng = seededRandom(seed);

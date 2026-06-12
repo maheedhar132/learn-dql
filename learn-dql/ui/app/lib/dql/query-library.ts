@@ -51,15 +51,13 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Find database queries exceeding a latency threshold.",
     difficulty: "intermediate",
     query: `fetch logs, from: -6h
-| filter log.source == "database"
-| parse content, "LD DURATION:query_time"
-| filter query_time > 500ms
-| fields timestamp, query_time, content
-| sort query_time desc
+| filter loglevel == "WARN" or loglevel == "ERROR"
+| filter duration_ms > 500
+| fields timestamp, host, duration_ms, content
+| sort duration_ms desc
 | limit 20`,
-    explanation: "Filters database logs and parses out query duration. The DURATION type automatically handles millisecond values. Results are sorted by slowest query first.",
+    explanation: "The sandbox Database Logs dataset exposes `duration_ms` as a top-level long field, so no parse step is needed here. On a live tenant where duration is buried in the log body, you would add `| parse content, \"LD DURATION:query_time\"` to extract a typed duration value (the DURATION matcher handles units like ms, s, etc. automatically) before filtering.",
     xpReward: 10,
-    liveOnly: true,
   },
   {
     id: "q-log-004",
@@ -132,13 +130,12 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Find spans with duration above a threshold.",
     difficulty: "simple",
     query: `fetch spans, from: -1h
-| filter duration > 1s
-| fields timestamp, span.name, duration, service.name
-| sort duration desc
+| filter duration_ms > 1000
+| fields timestamp, span.name, duration_ms, service.name
+| sort duration_ms desc
 | limit 50`,
-    explanation: "Filters spans exceeding 1 second latency. Spans represent individual operations in distributed traces.",
+    explanation: "Filters spans exceeding 1 second latency. Spans represent individual operations in distributed traces. Note: in a live Grail environment the field is `duration` (a native duration type that supports `filter duration > 1s` syntax); the sandbox models it as `duration_ms` (long, milliseconds) for simplicity.",
     xpReward: 5,
-    liveOnly: true,
   },
   {
     id: "q-span-002",
@@ -147,32 +144,31 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Calculate the percentage of error spans per service.",
     difficulty: "advanced",
     query: `fetch spans, from: -6h
-| fieldsAdd is_error = status.code == "ERROR"
 | summarize
     total = count(),
-    errors = countIf(is_error),
-    error_rate = countIf(is_error) * 100.0 / count(),
+    errors = countIf(is_error == true),
+    error_rate = toDouble(countIf(is_error == true)) / toDouble(count()) * 100,
     by:{service.name}
 | sort error_rate desc`,
-    explanation: "Creates a boolean flag for error spans, then aggregates total count, error count, and computes error rate percentage per service. The countIf function is key here.",
+    explanation: "Aggregates span counts and computes error rate percentage per service. countIf(condition) counts only rows where the condition is true. The sandbox spans dataset carries an `is_error` boolean field; on a live tenant you would derive it with `fieldsAdd is_error = status.code == \"ERROR\"` before summarising.",
     xpReward: 15,
   },
   {
     id: "q-span-003",
     category: "spans",
     title: "Latency Percentile Analysis",
-    description: "Compute p50, p95, and p99 latencies per endpoint.",
+    description: "Compute p50, p95, and p99 latencies per operation.",
     difficulty: "advanced",
     query: `fetch spans, from: -24h
-| filter status.code == "OK"
+| filter is_error == false
 | summarize
-    p50 = percentile(duration, 50),
-    p95 = percentile(duration, 95),
-    p99 = percentile(duration, 99),
-    by:{endpoint}
+    p50 = percentile(duration_ms, 50),
+    p95 = percentile(duration_ms, 95),
+    p99 = percentile(duration_ms, 99),
+    by:{span.name}
 | sort p99 desc
 | limit 20`,
-    explanation: "Uses the percentile() function to compute latency percentiles per endpoint. Filtering for OK status ensures only successful requests are analyzed.",
+    explanation: "Uses percentile() to compute latency distribution per operation name. Filtering for non-error spans ensures only successful requests are in the baseline. Sort by p99 to surface operations with the worst tail latency first.",
     xpReward: 15,
   },
 
@@ -496,9 +492,8 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | filter isNotNull(user)
 | fields timestamp, user, action, outcome
 | sort timestamp desc`,
-    explanation: "The KVP (key-value pair) matcher extracts key=value tokens from a log line into a single record field (here kv). The DPL pattern is always a quoted string, and individual pairs are accessed with bracket notation — kv[user] — then promoted to top-level fields with fieldsAdd. Ideal for structured-but-not-JSON application logs.",
+    explanation: "The KVP (key-value pair) matcher extracts key=value tokens from a log line into a single record field (here kv). The DPL pattern is always a quoted string, and individual pairs are accessed with bracket notation — kv[user] — then promoted to top-level fields with fieldsAdd. Ideal for structured-but-not-JSON application logs. Try it in the sandbox with the Audit Logs dataset.",
     xpReward: 10,
-    liveOnly: true,
   },
   {
     id: "q-parse-004",
@@ -512,9 +507,8 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | filter status_code >= 400
 | summarize errors = count(), by: {client_ip, status_code}
 | sort errors desc`,
-    explanation: "Typed matchers (IPADDR:, INT:, LONG:, DOUBLE:, DATA:, STRING:) extract values and cast them automatically. LD (line data) matches any characters up to the next matcher, and the quoted ' ' literals anchor the pattern on the spaces between tokens. This is the workhorse parse form for Nginx/Apache access log analysis.",
+    explanation: "Typed matchers (IPADDR:, INT:, LONG:, DOUBLE:, DATA:, STRING:) extract values and cast them automatically. LD (line data) matches any characters up to the next matcher, and the quoted ' ' literals anchor the pattern on the spaces between tokens. This is the workhorse parse form for Nginx/Apache access log analysis. Try it in the sandbox with the Nginx Logs dataset.",
     xpReward: 15,
-    liveOnly: true,
   },
   {
     id: "q-parse-005",
@@ -529,9 +523,8 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | fields timestamp, level, message, service
 | sort timestamp desc
 | limit 100`,
-    explanation: "The JSON matcher parses the whole content field as a JSON object into a single record field (here json). Individual keys are accessed with bracket notation — json[level] — and promoted to top-level fields with fieldsAdd. Works for structured JSON logs where the entire message body is one JSON object.",
+    explanation: "The JSON matcher parses the whole content field as a JSON object into a single record field (here json). Individual keys are accessed with bracket notation — json[level] — and promoted to top-level fields with fieldsAdd. Works for structured JSON logs where the entire message body is one JSON object. Try it in the sandbox with the JSON Logs dataset.",
     xpReward: 10,
-    liveOnly: true,
   },
 ];
 
