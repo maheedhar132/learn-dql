@@ -8,18 +8,8 @@ export const Header = () => {
     <AppHeader>
       <AppHeader.NavItems>
         <AppHeader.AppNavLink as={Link} to="/" />
-        <AppHeader.NavItem as={Link} to="/learn">
-          Learn
-        </AppHeader.NavItem>
         <AppHeader.NavItem as={Link} to="/sandbox">
           Sandbox
-        </AppHeader.NavItem>
-        <AppHeader.NavItem as={Link} to="/log-hunt">
-          Log Hunt
-        </AppHeader.NavItem>
-
-        <AppHeader.NavItem as={Link} to="/codex">
-          Reference
         </AppHeader.NavItem>
       </AppHeader.NavItems>
       <AppHeader.ActionItems>
