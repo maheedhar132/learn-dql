@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
-  Heading,
   Paragraph,
   Strong,
   Code,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
+import { Chip, MessageContainer, Markdown } from "@dynatrace/strato-components/content";
 import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import {
@@ -337,16 +336,6 @@ function getData(sourceId: string): DQLRecord[] {
 
 // ─── Text Cell ────────────────────────────────────────────────────────────────
 
-function renderNote(note: string): React.ReactNode[] {
-  return note.split("\n").map((line, i) => {
-    if (line.startsWith("# ")) return <Heading key={i} level={2} style={{ margin: "4px 0 8px" }}>{line.slice(2)}</Heading>;
-    if (line.startsWith("## ")) return <Heading key={i} level={3} style={{ margin: "4px 0 6px" }}>{line.slice(3)}</Heading>;
-    if (line.startsWith("- ")) return <Paragraph key={i} style={{ margin: "2px 0" }}>• {line.slice(2)}</Paragraph>;
-    if (line.trim() === "") return <div key={i} style={{ height: 6 }} />;
-    return <Paragraph key={i} style={{ margin: "2px 0", lineHeight: 1.6 }}>{line}</Paragraph>;
-  });
-}
-
 function TextCellComponent({ cell, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst, isLast }: {
   cell: TextCell;
   onUpdate: (id: string, patch: Partial<TextCell>) => void;
@@ -406,10 +395,10 @@ function TextCellComponent({ cell, onUpdate, onDelete, onMoveUp, onMoveDown, isF
                 resize: "vertical",
                 outline: "none",
               }}
-              placeholder="Write notes in plain text. Start a line with # for a heading, ## for subheading, - for a bullet."
+              placeholder="Write notes in Markdown. Use # for headings, - for bullets, **bold**, `code`."
             />
           ) : (
-            <div>{renderNote(cell.note)}</div>
+            <Markdown>{cell.note}</Markdown>
           )}
         </div>
       </Flex>
@@ -722,21 +711,19 @@ export const Notebook = () => {
   }
 
   return (
-    <Flex flexDirection="column" padding={32} gap={20} style={{ maxWidth: 1080, margin: "0 auto" }}>
-      {/* Header */}
-      <Flex alignItems="center" justifyContent="space-between" gap={16} flexWrap="wrap">
-        <Flex flexDirection="column" gap={4}>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>
           <TextInput
             value={notebookTitle}
             onChange={(v) => setNotebookTitle(v ?? "")}
-            style={{ fontSize: "1.3rem", fontWeight: 700, width: 400 }}
             aria-label="Notebook title"
           />
-          <Paragraph style={{ opacity: 0.55, margin: 0, fontSize: "0.85rem" }}>
-            Multi-cell DQL notebook · 8 data sources · {saveError ? "⚠ save failed (storage full?)" : "auto-saves to this browser"}
-          </Paragraph>
-        </Flex>
-        <Flex gap={8} flexWrap="wrap">
+        </TitleBar.Title>
+        <TitleBar.Subtitle>
+          Multi-cell DQL notebook · 8 data sources · {saveError ? "⚠ save failed (storage full?)" : "auto-saves to this browser"}
+        </TitleBar.Subtitle>
+        <TitleBar.Suffix>
           <Button variant="default" onClick={runAll}>
             <PlayIcon size={14} /> Run all
           </Button>
@@ -749,9 +736,10 @@ export const Notebook = () => {
           <Button variant="accent" onClick={addQueryCell}>
             <PlusIcon size={14} /> Query cell
           </Button>
-        </Flex>
-      </Flex>
+        </TitleBar.Suffix>
+      </TitleBar>
 
+      <Flex flexDirection="column" padding={32} gap={20}>
       <Divider />
 
       {/* Live-seed schema banner */}
@@ -848,13 +836,12 @@ export const Notebook = () => {
       </Flex>
 
       {/* Footer */}
-      <Flex justifyContent="space-between" alignItems="center" paddingTop={8}>
-        <Paragraph style={{ fontSize: "0.72rem", opacity: 0.35, margin: 0 }}>
-          Free in-app simulation — no Dynatrace environment required.
-        </Paragraph>
-        <Button variant="default" onClick={resetNotebook} style={{ fontSize: "0.75rem", opacity: 0.5 }}>
+      <Flex justifyContent="flex-end" paddingTop={8}>
+        <Button variant="default" onClick={resetNotebook}>
           Reset notebook
         </Button>
+      </Flex>
+
       </Flex>
     </Flex>
   );

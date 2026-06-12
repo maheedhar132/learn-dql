@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Grid, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
   Strong,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
-import { TextInput } from "@dynatrace/strato-components/forms";
+import { Chip, EmptyState } from "@dynatrace/strato-components/content";
+import { SearchInput } from "@dynatrace/strato-components/forms";
 import { ALL_SCENARIOS } from "../lib/dql";
 import { getProgress } from "../lib/progress";
 import type { Scenario } from "../lib/types/dql";
@@ -130,15 +130,15 @@ export const Learn = () => {
   const anyFilterActive = !!filterDifficulty || filterStatus !== "all" || !!search;
 
   return (
-    <Flex flexDirection="column" padding={32} gap={24}>
-      {/* ── Header ── */}
-      <Flex flexDirection="column" gap={6}>
-        <Heading level={1}>Lessons</Heading>
-        <Paragraph>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>Lessons</TitleBar.Title>
+        <TitleBar.Subtitle>
           {ALL_SCENARIOS.length} lessons · {completed.size} completed
-        </Paragraph>
-      </Flex>
+        </TitleBar.Subtitle>
+      </TitleBar>
 
+      <Flex flexDirection="column" padding={32} gap={24}>
       {/* ── Onboarding banner — hidden once complete ── */}
       {!onboardingComplete && (
         <Surface>
@@ -168,11 +168,10 @@ export const Learn = () => {
 
       {/* ── Filters ── */}
       <Flex gap={12} alignItems="center" flexWrap="wrap">
-        <TextInput
+        <SearchInput
           value={search}
           onChange={(v) => setSearch(v ?? "")}
           placeholder="Search lessons…"
-          style={{ minWidth: 200 }}
         />
 
         <Flex gap={6}>
@@ -217,17 +216,18 @@ export const Learn = () => {
       {anyFilterActive && TRACK_ORDER.every((track) =>
         ALL_SCENARIOS.filter((s) => (s.track ?? "dql") === track.key).filter(matchScenario).length === 0
       ) && (
-        <MessageContainer variant="neutral">
-          <MessageContainer.Title>No lessons match</MessageContainer.Title>
-          <MessageContainer.Description>
+        <EmptyState>
+          <EmptyState.VisualPreset context="generic" type="no-result" />
+          <EmptyState.Title>No lessons match</EmptyState.Title>
+          <EmptyState.Details>
             Try a different search term or clear the filters to see all lessons.
-          </MessageContainer.Description>
-          <MessageContainer.Actions>
+          </EmptyState.Details>
+          <EmptyState.Actions>
             <Button onClick={() => { setSearch(""); setFilterDifficulty(null); setFilterStatus("all"); }}>
               Clear filters
             </Button>
-          </MessageContainer.Actions>
-        </MessageContainer>
+          </EmptyState.Actions>
+        </EmptyState>
       )}
 
       {/* ── Tracks ── */}
@@ -261,11 +261,6 @@ export const Learn = () => {
         );
       })}
 
-      {/* ── Footer reference ── */}
-      <Flex justifyContent="center" paddingTop={16}>
-        <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, textAlign: "center" }}>
-          Free in-app simulation — learn without affecting your Dynatrace environment or incurring any charges.
-        </Paragraph>
       </Flex>
     </Flex>
   );

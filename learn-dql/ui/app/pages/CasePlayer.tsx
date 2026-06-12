@@ -1,16 +1,15 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
-import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
   Strong,
   Code,
   Link,
-  Text,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
+import { Chip, MessageContainer, Accordion, CodeSnippet } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { ALL_SCENARIOS } from "../lib/dql";
 import {
@@ -105,7 +104,7 @@ export const CasePlayer = () => {
     return (
       <Flex flexDirection="column" padding={32} gap={12}>
         <Heading level={2}>Lesson not found</Heading>
-        <Link as={RouterLink} to="/learn">Back to Learn</Link>
+        <Link as={RouterLink} to="/learn">← All lessons</Link>
       </Flex>
     );
   }
@@ -148,25 +147,17 @@ export const CasePlayer = () => {
   const showSolution = failCount >= SOLUTION_AFTER || isSuccess;
 
   return (
-    <Flex flexDirection="column" padding={32} gap={20}>
-      <Flex flexDirection="column" gap={4}>
-        <Link as={RouterLink} to="/learn">← All lessons</Link>
-        <Flex alignItems="center" gap={12}>
-          <Heading level={1}>{scenario.title}</Heading>
-          <Chip>{scenario.difficulty}</Chip>
-        </Flex>
-        <Paragraph>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Navigation>
+          <Link as={RouterLink} to="/learn">← All lessons</Link>
+        </TitleBar.Navigation>
+        <TitleBar.Title>{scenario.title}</TitleBar.Title>
+        <TitleBar.Subtitle>
           <Strong>{scenario.company}</Strong> — {scenario.briefing}
-        </Paragraph>
-      </Flex>
-
-      <Divider />
-
-      <Flex justifyContent="space-between" alignItems="center">
-        <Heading level={3}>
-          Step {stepIndex + 1} / {scenario.steps.length}: {step.title}
-        </Heading>
-        <Flex gap={8}>
+        </TitleBar.Subtitle>
+        <TitleBar.Suffix>
+          <Chip>{scenario.difficulty}</Chip>
           <Button disabled={stepIndex === 0} onClick={() => setStepIndex((i) => i - 1)}>
             Previous
           </Button>
@@ -191,7 +182,15 @@ export const CasePlayer = () => {
               Next step
             </Button>
           )}
-        </Flex>
+        </TitleBar.Suffix>
+      </TitleBar>
+
+      <Flex flexDirection="column" padding={32} gap={20}>
+
+      <Flex justifyContent="space-between" alignItems="center">
+        <Heading level={3}>
+          Step {stepIndex + 1} / {scenario.steps.length}: {step.title}
+        </Heading>
       </Flex>
 
       {/* ── Lesson card ── */}
@@ -214,96 +213,55 @@ export const CasePlayer = () => {
           </Flex>
 
           {/* Support ladder: nothing → hint (after 1 failure) → solution (after 3) */}
-          {isDqlStep && !showSolution && (
-            <Flex
-              flexDirection="column"
-              gap={8}
-              style={{
-                borderLeft: `3px solid ${showHint ? "rgba(255,200,80,0.5)" : "rgba(127,127,127,0.25)"}`,
-                paddingLeft: 14,
-              }}
-            >
-              {showHint ? (
-                <>
-                  <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                    Hint
-                  </Strong>
-                  <Paragraph style={{ fontSize: "0.875rem", margin: 0, lineHeight: 1.5 }}>
-                    {step.hint}
-                  </Paragraph>
-                  {failCount < SOLUTION_AFTER && (
-                    <Paragraph style={{ fontSize: "0.75rem", opacity: 0.5, margin: 0 }}>
-                      The full solution unlocks after {SOLUTION_AFTER - failCount} more unsuccessful attempt{SOLUTION_AFTER - failCount !== 1 ? "s" : ""}.
-                    </Paragraph>
-                  )}
-                </>
-              ) : (
-                <Paragraph style={{ fontSize: "0.8rem", opacity: 0.55, margin: 0 }}>
-                  Write the query yourself using the concept above. A hint appears after your
-                  first unsuccessful attempt; the full solution unlocks after {SOLUTION_AFTER}.
-                </Paragraph>
+          {isDqlStep && (
+            <Accordion>
+              {showHint && (
+                <Accordion.Section id="hint">
+                  <Accordion.SectionLabel>
+                    Hint {failCount < SOLUTION_AFTER && `— solution unlocks after ${SOLUTION_AFTER - failCount} more attempt${SOLUTION_AFTER - failCount !== 1 ? "s" : ""}`}
+                  </Accordion.SectionLabel>
+                  <Accordion.SectionContent>
+                    <Paragraph style={{ margin: 0 }}>{step.hint}</Paragraph>
+                  </Accordion.SectionContent>
+                </Accordion.Section>
               )}
-            </Flex>
-          )}
-
-          {/* Full reference query — earned via the ladder (or already solved) */}
-          {isDqlStep && showSolution && (
-            <Flex
-              flexDirection="column"
-              gap={8}
-              style={{
-                borderLeft: "3px solid rgba(100,160,255,0.4)",
-                paddingLeft: 14,
-              }}
-            >
-              <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Solution
-              </Strong>
-              <Code style={{ display: "block", whiteSpace: "pre", overflowX: "auto", fontSize: "0.875rem", lineHeight: 1.6 }}>
-                {pipelineToQuery(step.expectedPipeline)}
-              </Code>
-            </Flex>
+              {showSolution && (
+                <Accordion.Section id="solution">
+                  <Accordion.SectionLabel>Solution</Accordion.SectionLabel>
+                  <Accordion.SectionContent>
+                    <CodeSnippet language="dql" showCopyAction>
+                      {pipelineToQuery(step.expectedPipeline)}
+                    </CodeSnippet>
+                  </Accordion.SectionContent>
+                </Accordion.Section>
+              )}
+            </Accordion>
           )}
 
           {/* Concept-only reference query */}
           {!isDqlStep && step.referenceQuery && (
-            <Flex
-              flexDirection="column"
-              gap={8}
-              style={{
-                borderLeft: "3px solid rgba(180,120,255,0.4)",
-                paddingLeft: 14,
-              }}
-            >
-              <Strong style={{ fontSize: "0.8rem", opacity: 0.55, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Real-World DQL Pattern
-              </Strong>
-              <Paragraph style={{ fontSize: "0.8rem", opacity: 0.65, margin: 0 }}>
-                This is how the query would look in a live Dynatrace environment. It is shown for reference only — the offline engine cannot execute live subqueries.
-              </Paragraph>
-              <Code style={{ display: "block", whiteSpace: "pre", overflowX: "auto", fontSize: "0.875rem", lineHeight: 1.6 }}>
-                {step.referenceQuery}
-              </Code>
-            </Flex>
+            <Accordion>
+              <Accordion.Section id="reference">
+                <Accordion.SectionLabel>Real-World DQL Pattern</Accordion.SectionLabel>
+                <Accordion.SectionContent>
+                  <Flex flexDirection="column" gap={8}>
+                    <Paragraph style={{ margin: 0 }}>
+                      This is how the query would look in a live Dynatrace environment — shown for reference only; the offline engine cannot execute live subqueries.
+                    </Paragraph>
+                    <CodeSnippet language="dql" showCopyAction>
+                      {step.referenceQuery}
+                    </CodeSnippet>
+                  </Flex>
+                </Accordion.SectionContent>
+              </Accordion.Section>
+            </Accordion>
           )}
 
           {/* Goal */}
-          <Flex
-            gap={8}
-            alignItems="flex-start"
-            style={{
-              background: "rgba(80,200,120,0.08)",
-              border: "1px solid rgba(80,200,120,0.2)",
-              borderRadius: 4,
-              padding: "10px 14px",
-            }}
-          >
-            <Text style={{ fontSize: "0.8rem", opacity: 0.7, flexShrink: 0, paddingTop: 2 }}>🎯</Text>
-            <Flex flexDirection="column" gap={2}>
-              <Strong style={{ fontSize: "0.8rem" }}>Your task</Strong>
-              <Paragraph style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.5 }}>{step.goal}</Paragraph>
-            </Flex>
-          </Flex>
+          <MessageContainer variant="success">
+            <MessageContainer.Title>Your task</MessageContainer.Title>
+            <MessageContainer.Description>{step.goal}</MessageContainer.Description>
+          </MessageContainer>
 
           {/* Available fields */}
           {availableFields.length > 0 && (
@@ -319,9 +277,6 @@ export const CasePlayer = () => {
             </Flex>
           )}
 
-          <Text style={{ fontSize: "0.72rem", opacity: 0.35 }}>
-            Free in-app simulation — no Dynatrace environment required, zero DDU cost.
-          </Text>
         </Flex>
       </Surface>
 
@@ -451,13 +406,17 @@ export const CasePlayer = () => {
           <Flex flexDirection="column" padding={16} gap={8}>
             <Strong>Dynatrace Pattern Language exercise</Strong>
             <Paragraph>Sample input lines:</Paragraph>
-            {step.dpl?.inputs.map((line, i) => <Code key={i}>{line}</Code>)}
+            {step.dpl?.inputs.map((line, i) => (
+              <Code key={i}>{line}</Code>
+            ))}
             <Paragraph><Strong>Expected pattern:</Strong></Paragraph>
             <Code>{step.dpl?.expectedPattern}</Code>
             <Paragraph><Strong>Fields extracted:</Strong>{" "}{step.dpl?.expectedFields.join(", ")}</Paragraph>
           </Flex>
         </Surface>
       ) : null}
+
+      </Flex>
     </Flex>
   );
 };

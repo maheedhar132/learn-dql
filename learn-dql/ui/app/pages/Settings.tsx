@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Flex, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
@@ -132,14 +132,15 @@ export const Settings = () => {
     : null;
 
   return (
-    <Flex flexDirection="column" padding={32} gap={24} style={{ maxWidth: 900 }}>
-      <Flex flexDirection="column" gap={4}>
-        <Heading level={1}>Settings</Heading>
-        <Paragraph style={{ opacity: 0.7 }}>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>Settings</TitleBar.Title>
+        <TitleBar.Subtitle>
           Configure how the app generates sample data and integrates with your Dynatrace environment.
-        </Paragraph>
-      </Flex>
+        </TitleBar.Subtitle>
+      </TitleBar>
 
+      <Flex flexDirection="column" padding={32} gap={24}>
       <Divider />
 
       {/* ── Live Seed ── */}
@@ -161,12 +162,12 @@ export const Settings = () => {
               </Paragraph>
             </Flex>
             <Flex alignItems="center" gap={8}>
-              <Button
-                variant={settings.liveSeedEnabled ? "accent" : "default"}
-                onClick={() => toggleLiveSeed(!settings.liveSeedEnabled)}
+              <Checkbox
+                value={settings.liveSeedEnabled}
+                onChange={(checked) => toggleLiveSeed(!!checked)}
               >
-                {settings.liveSeedEnabled ? "Enabled" : "Disabled"}
-              </Button>
+                Enable
+              </Checkbox>
             </Flex>
           </Flex>
 
@@ -254,10 +255,7 @@ export const Settings = () => {
         </Flex>
       </Surface>
 
-      {/* ── App version ── */}
-      <Paragraph style={{ fontSize: "0.75rem", opacity: 0.35, textAlign: "center" }}>
-        Learn DQL v0.2.0 · Offline simulation · No Grail DDU cost
-      </Paragraph>
+      </Flex>
     </Flex>
   );
 };

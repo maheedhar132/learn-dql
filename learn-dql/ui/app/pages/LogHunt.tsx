@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Grid, Surface, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip } from "@dynatrace/strato-components/content";
+import { Chip, EmptyState } from "@dynatrace/strato-components/content";
 import { logHuntScenarios } from "../lib/dql/log-hunt-scenarios";
 import { getProgress } from "../lib/progress";
 
@@ -28,19 +28,16 @@ export const LogHunt = () => {
   }, [filterDifficulty, filterStatus, completedHunts]);
 
   return (
-    <Flex flexDirection="column" padding={32} gap={24}>
-      <Flex flexDirection="column" gap={8}>
-        <Heading level={1}>🕵️ Log Hunt</Heading>
-        <Paragraph>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>Log Hunt</TitleBar.Title>
+        <TitleBar.Subtitle>
           Solve story-driven mysteries using DQL. Each hunt drops you into a real-world incident —
-          read the full brief, understand what you're looking for, then write your own queries to crack the case.
-        </Paragraph>
-        <Paragraph style={{ fontSize: "0.85rem", opacity: 0.6 }}>
-          {completedHunts.size} / {logHuntScenarios.length} cases closed
-        </Paragraph>
-      </Flex>
+          read the brief, write queries, crack the case. {completedHunts.size} / {logHuntScenarios.length} cases closed.
+        </TitleBar.Subtitle>
+      </TitleBar>
 
-      <Divider />
+      <Flex flexDirection="column" padding={32} gap={24}>
 
       {/* ── Filters ── */}
       <Flex gap={12} alignItems="center" flexWrap="wrap">
@@ -74,7 +71,15 @@ export const LogHunt = () => {
       </Flex>
 
       {visibleScenarios.length === 0 && (
-        <Paragraph style={{ opacity: 0.6 }}>No hunts match the current filters.</Paragraph>
+        <EmptyState>
+          <EmptyState.VisualPreset context="generic" type="no-result" />
+          <EmptyState.Title>No hunts match the current filters</EmptyState.Title>
+          <EmptyState.Actions>
+            <Button onClick={() => { setFilterDifficulty(null); setFilterStatus("all"); }}>
+              Clear filters
+            </Button>
+          </EmptyState.Actions>
+        </EmptyState>
       )}
 
       <Grid gridTemplateColumns="repeat(3, 1fr)" gap={20}>
@@ -84,7 +89,7 @@ export const LogHunt = () => {
             <Surface key={scenario.id}>
               <Flex flexDirection="column" padding={20} gap={12} style={{ height: "100%" }}>
                 <Flex justifyContent="space-between" alignItems="flex-start">
-                  <Heading level={3} style={{ margin: 0, fontSize: "1.25rem" }}>
+                  <Heading level={3} style={{ margin: 0 }}>
                     {scenario.emoji} {scenario.title}
                   </Heading>
                   <Flex gap={6}>
@@ -93,7 +98,7 @@ export const LogHunt = () => {
                   </Flex>
                 </Flex>
 
-                <Paragraph style={{ flexGrow: 1, fontSize: "0.85rem", lineHeight: 1.5 }}>
+                <Paragraph style={{ flexGrow: 1 }}>
                   {scenario.story.length > 160
                     ? `${scenario.story.slice(0, 160)}…`
                     : scenario.story}
@@ -110,6 +115,8 @@ export const LogHunt = () => {
           );
         })}
       </Grid>
+
+      </Flex>
     </Flex>
   );
 };

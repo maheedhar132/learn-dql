@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Grid, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
-  Heading,
   Paragraph,
   Strong,
   Code,
   Link,
 } from "@dynatrace/strato-components/typography";
-import { Button } from "@dynatrace/strato-components/buttons";
+import { Button, RunQueryButton } from "@dynatrace/strato-components/buttons";
 import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { runQuery, type RunOutcome } from "../lib/validate";
@@ -119,24 +118,28 @@ export const Sandbox = () => {
     runWithQuery(newQuery);
   }
 
-  return (
-    <Flex flexDirection="column" padding={32} gap={16}>
-      <Flex flexDirection="column" gap={4}>
-        <Heading level={1}>Sandbox</Heading>
-        <Paragraph>
-          Free-form DQL against a deterministic offline dataset — 2,200 sample app-log records.
-          Runs entirely in the browser. No Dynatrace environment required.
-        </Paragraph>
-      </Flex>
+  const queryState = outcome === null ? "idle" : outcome.error ? "error" : "success";
 
+  return (
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>Sandbox</TitleBar.Title>
+        <TitleBar.Subtitle>
+          Free-form DQL against 2,200 offline sample records — runs entirely in your browser, no Dynatrace environment needed.
+        </TitleBar.Subtitle>
+      </TitleBar>
+
+      <Flex flexDirection="column" padding={32} gap={16}>
       <Grid gridTemplateColumns="1fr 300px" gap={20} alignItems="start">
         {/* ── Left: editor + results ── */}
         <Flex flexDirection="column" gap={12}>
           <DQLEditor value={query} onChange={(v) => setQuery(v)} />
           <Flex gap={8} alignItems="center">
-            <Button variant="accent" disabled={!query.trim()} onClick={() => runWithQuery(query)}>
-              Run query
-            </Button>
+            <RunQueryButton
+              queryState={queryState}
+              disabled={!query.trim()}
+              onClick={() => runWithQuery(query)}
+            />
             <Button onClick={() => { setQuery(""); setOutcome(null); }}>
               Clear
             </Button>
@@ -247,6 +250,7 @@ export const Sandbox = () => {
           </Flex>
         </Surface>
       </Grid>
+      </Flex>
     </Flex>
   );
 };

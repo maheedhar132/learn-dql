@@ -11,7 +11,7 @@ import {
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
-import Colors from "@dynatrace/strato-design-tokens/colors";
+import { RadioGroup, Radio } from "@dynatrace/strato-components/forms";
 import { logHuntScenarios, type LogHuntMCQ } from "../lib/dql/log-hunt-scenarios";
 import { runQuery } from "../lib/validate";
 import { markHuntComplete } from "../lib/progress";
@@ -169,21 +169,10 @@ function MCQPanel({
   }
 
   return (
-    <Surface
-      style={{
-        borderLeft: `3px solid ${
-          solved
-            ? Colors.Charts.Threshold.Good.Default
-            : exhausted
-            ? Colors.Charts.Threshold.Bad.Default
-            : "transparent"
-        }`,
-        transition: "border-color 0.2s",
-      }}
-    >
+    <Surface>
       <Flex flexDirection="column" padding={16} gap={16}>
-        <Flex alignItems="center" gap={12}>
-          <Chip>Final Verdict</Chip>
+        <Flex alignItems="center" gap={12} flexWrap="wrap">
+          <Chip color={solved ? "success" : exhausted ? "critical" : undefined}>Final Verdict</Chip>
           <Paragraph style={{ fontWeight: 600, margin: 0 }}>
             {mcq.question}
           </Paragraph>
@@ -201,38 +190,23 @@ function MCQPanel({
           </MessageContainer>
         )}
 
-        <Flex flexDirection="column" gap={8}>
+        <RadioGroup
+          value={selected ?? ""}
+          onChange={(v) => { if (!locked) setSelected(v ?? null); }}
+        >
           {mcq.options.map((opt) => {
-            const isSelected = selected === opt;
             const showCorrect = (solved || exhausted) && opt === mcq.correctAnswer;
             return (
-              <Button
+              <Radio
                 key={opt}
-                variant="default"
-                onClick={() => {
-                  if (!locked) setSelected(opt);
-                }}
-                style={{
-                  justifyContent: "flex-start",
-                  background: showCorrect
-                    ? `${Colors.Charts.Threshold.Good.Default}22`
-                    : isSelected
-                    ? "rgba(127,127,127,0.15)"
-                    : "transparent",
-                  border: isSelected
-                    ? `1px solid ${showCorrect ? Colors.Charts.Threshold.Good.Default : "rgba(127,127,127,0.4)"}`
-                    : showCorrect
-                    ? `1px solid ${Colors.Charts.Threshold.Good.Default}`
-                    : "1px solid transparent",
-                  cursor: locked ? "default" : "pointer",
-                  fontWeight: isSelected ? 600 : 400,
-                }}
+                value={opt}
+                disabled={locked}
               >
-                {showCorrect ? "✓ " : ""}{opt}
-              </Button>
+                {showCorrect ? `✓ ${opt}` : opt}
+              </Radio>
             );
           })}
-        </Flex>
+        </RadioGroup>
 
         {!locked && (
           <Button

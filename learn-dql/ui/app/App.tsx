@@ -2,7 +2,8 @@ import { Page } from "@dynatrace/strato-components-preview/layouts";
 import React from "react";
 import { Route, Routes, Link as RouterLink } from "react-router-dom";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Heading, Paragraph, Link } from "@dynatrace/strato-components/typography";
+import { EmptyState } from "@dynatrace/strato-components/content";
+import { Button } from "@dynatrace/strato-components/buttons";
 import { Header } from "./components/Header";
 import { Home } from "./pages/Home";
 import { Learn } from "./pages/Learn";
@@ -15,10 +16,15 @@ import { Codex } from "./pages/Codex";
 import { Settings } from "./pages/Settings";
 
 const NotFound = () => (
-  <Flex flexDirection="column" padding={48} gap={12} alignItems="center">
-    <Heading level={2}>Page not found</Heading>
-    <Paragraph style={{ opacity: 0.7 }}>That page doesn't exist in Learn DQL.</Paragraph>
-    <Link as={RouterLink} to="/">Back to Home</Link>
+  <Flex flexDirection="column" padding={48} alignItems="center">
+    <EmptyState>
+      <EmptyState.VisualPreset context="generic" type="something-missing" />
+      <EmptyState.Title>Page not found</EmptyState.Title>
+      <EmptyState.Details>That page doesn't exist in Learn DQL.</EmptyState.Details>
+      <EmptyState.Actions>
+        <Button as={RouterLink} to="/" variant="accent">Back to Home</Button>
+      </EmptyState.Actions>
+    </EmptyState>
   </Flex>
 );
 

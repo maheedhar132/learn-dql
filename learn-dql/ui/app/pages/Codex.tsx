@@ -1,15 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flex, Grid, Surface, Divider } from "@dynatrace/strato-components/layouts";
+import { Flex, Grid, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
-  Heading,
   Paragraph,
   Strong,
-  Code,
 } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Chip } from "@dynatrace/strato-components/content";
-import { TextInput } from "@dynatrace/strato-components/forms";
+import { Chip, CodeSnippet, ExpandableText, EmptyState } from "@dynatrace/strato-components/content";
+import { SearchInput } from "@dynatrace/strato-components/forms";
 import {
   QUERY_LIBRARY,
   getAllCategories,
@@ -51,19 +49,12 @@ interface QueryCardProps {
 }
 
 const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
-  const [expanded, setExpanded] = useState(false);
-  const shouldCollapse = entry.explanation.length > 100;
-  const displayedExplanation =
-    !shouldCollapse || expanded
-      ? entry.explanation
-      : `${entry.explanation.slice(0, 100)}…`;
-
   return (
     <Surface>
       <Flex flexDirection="column" padding={20} gap={12}>
         {/* Header row */}
         <Flex justifyContent="space-between" alignItems="flex-start" gap={8} flexWrap="wrap">
-          <Strong style={{ fontSize: "1rem" }}>{entry.title}</Strong>
+          <Strong>{entry.title}</Strong>
           <Flex gap={6} flexShrink={0}>
             <Chip color={DIFFICULTY_COLORS[entry.difficulty]}>{capitalize(entry.difficulty)}</Chip>
             <Chip>
@@ -79,50 +70,28 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
         </Flex>
 
         {/* Description */}
-        <Paragraph style={{ margin: 0, opacity: 0.8, fontSize: "0.9rem" }}>
+        <Paragraph style={{ margin: 0 }}>
           {entry.description}
         </Paragraph>
 
         {/* Query display */}
-        <Code
-          style={{
-            display: "block",
-            whiteSpace: "pre",
-            fontSize: "0.8rem",
-            overflowX: "auto",
-            padding: "8px",
-            borderRadius: "4px",
-          }}
-        >
+        <CodeSnippet language="dql" showCopyAction>
           {entry.query}
-        </Code>
+        </CodeSnippet>
 
         {/* Explanation (collapsible) */}
-        <Flex flexDirection="column" gap={4}>
-          <Paragraph style={{ margin: 0, fontSize: "0.85rem", opacity: 0.7 }}>
-            {displayedExplanation}
-          </Paragraph>
-          {shouldCollapse && (
-            <Button
-              variant="default"
-              style={{ alignSelf: "flex-start", padding: 0, fontSize: "0.8rem" }}
-              onClick={() => setExpanded((prev) => !prev)}
-            >
-              {expanded ? "Show less" : "Show more"}
-            </Button>
-          )}
-        </Flex>
+        <ExpandableText>
+          {entry.explanation}
+        </ExpandableText>
 
         <Divider />
 
         {/* Footer row */}
         <Flex justifyContent="space-between" alignItems="center">
-          <Paragraph style={{ margin: 0, fontSize: "0.75rem", opacity: 0.5 }}>
-            +{entry.xpReward} XP
-          </Paragraph>
+          <Chip>+{entry.xpReward} XP</Chip>
           {entry.liveOnly ? (
-            <Paragraph style={{ margin: 0, fontSize: "0.78rem", opacity: 0.55 }}>
-              Runs in a live Dynatrace tenant — copy into a Notebook there
+            <Paragraph style={{ margin: 0 }}>
+              Copy into a live Dynatrace Notebook to run
             </Paragraph>
           ) : (
             <Button variant="default" onClick={onTryInSandbox}>
@@ -168,22 +137,21 @@ export const Codex = () => {
   }
 
   return (
-    <Flex flexDirection="column" padding={32} gap={24}>
-      {/* Header */}
-      <Flex flexDirection="column" gap={8}>
-        <Heading level={1}>📚 DQL Query Reference</Heading>
-        <Paragraph style={{ opacity: 0.75, maxWidth: 640, margin: 0 }}>
-          A searchable library of production-ready DQL patterns. Each query is annotated with an
-          explanation and difficulty rating. Click <Strong>Try in Sandbox</Strong> to run any
-          query against live sample data.
-        </Paragraph>
-      </Flex>
+    <Flex flexDirection="column" gap={0}>
+      <TitleBar>
+        <TitleBar.Title>DQL Query Reference</TitleBar.Title>
+        <TitleBar.Subtitle>
+          A searchable library of production-ready DQL patterns with explanations and difficulty ratings.
+        </TitleBar.Subtitle>
+      </TitleBar>
+
+      <Flex flexDirection="column" padding={32} gap={24}>
 
       {/* Filter bar */}
       <Surface>
         <Flex flexDirection="column" padding={16} gap={12}>
           {/* Search */}
-          <TextInput
+          <SearchInput
             value={searchText}
             onChange={(v) => setSearchText(v ?? "")}
             placeholder="Search by title, description, or query text…"
@@ -263,19 +231,19 @@ export const Codex = () => {
           ))}
         </Grid>
       ) : (
-        <Surface>
-          <Flex flexDirection="column" padding={40} alignItems="center" gap={12}>
-            <Paragraph style={{ fontSize: "1.5rem", margin: 0 }}>🔍</Paragraph>
-            <Heading level={3}>No queries match your filters</Heading>
-            <Paragraph style={{ opacity: 0.65, margin: 0, textAlign: "center" }}>
-              Try adjusting your search text or clearing the category and difficulty filters.
-            </Paragraph>
-            <Button variant="accent" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          </Flex>
-        </Surface>
+        <EmptyState>
+          <EmptyState.VisualPreset context="generic" type="no-result" />
+          <EmptyState.Title>No queries match your filters</EmptyState.Title>
+          <EmptyState.Details>
+            Try adjusting your search text or clearing the category and difficulty filters.
+          </EmptyState.Details>
+          <EmptyState.Actions>
+            <Button variant="accent" onClick={clearFilters}>Clear filters</Button>
+          </EmptyState.Actions>
+        </EmptyState>
       )}
+
+      </Flex>
     </Flex>
   );
 };
