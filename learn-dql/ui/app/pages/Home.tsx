@@ -13,14 +13,11 @@ import { ALL_SCENARIOS } from "../lib/dql";
 import { getProgress } from "../lib/progress";
 import { logHuntScenarios } from "../lib/dql/log-hunt-scenarios";
 
-// ─── Card image URLs (place the provided PNGs in learn-dql/ui/assets/) ──────
-// learn-dql/ui/assets/home-learn-dql.png  → the Dynatrace Learn DQL logo
-// learn-dql/ui/assets/home-sandbox.png    → the Sandbox illustration
-// learn-dql/ui/assets/home-log-hunt.png   → the Log Hunt robot illustration
-// When an image is missing the CSS gradient fallback is used automatically.
-const IMG_LEARN    = "/assets/home-learn-dql.png";
-const IMG_SANDBOX  = "/assets/home-sandbox.png";
-const IMG_LOG_HUNT = "/assets/home-log-hunt.png";
+// Asset paths are relative to the served index.html (dt-app convention —
+// same as ./assets/Dynatrace_Logo.svg elsewhere in the app).
+const IMG_LEARN    = "./assets/home-learn-dql.png";
+const IMG_SANDBOX  = "./assets/home-sandbox.png";
+const IMG_LOG_HUNT = "./assets/home-log-hunt.png";
 
 // ─── Gradient fallbacks (used while images haven't been placed yet) ──────────
 const GRAD_LEARN =
@@ -45,10 +42,10 @@ function CardImage({
     <div
       style={{
         width: "100%",
-        height: 220,
+        height: 240,
         backgroundImage: `url(${src}), ${fallbackGradient}`,
-        backgroundSize: "cover",
-        backgroundPosition: "center top",
+        backgroundSize: "contain, cover",
+        backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         borderRadius: "8px 8px 0 0",
         overflow: "hidden",
@@ -109,21 +106,23 @@ export const Home = () => {
       </TitleBar>
 
       <Flex flexDirection="column" padding={32} gap={0}>
-        <Grid gridTemplateColumns="repeat(3, 1fr)" gap={24} alignItems="start">
+        <Grid gridTemplateColumns="repeat(3, 1fr)" gap={24}>
 
           {/* ── Card 1: Learn DQL ── */}
-          <Surface>
-            <Flex flexDirection="column" gap={0}>
+          <Surface style={{ height: "100%" }}>
+            <Flex flexDirection="column" gap={0} style={{ height: "100%" }}>
               <CardImage src={IMG_LEARN} fallbackGradient={GRAD_LEARN} alt="Learn DQL" />
 
-              <Flex flexDirection="column" padding={24} gap={20}>
+              <Flex flexDirection="column" padding={24} gap={20} style={{ flexGrow: 1 }}>
                 <Flex flexDirection="column" gap={6}>
                   <Heading level={2} style={{ margin: 0 }}>Learn DQL</Heading>
                   <Paragraph style={{ margin: 0 }}>
                     Step-by-step guided lessons that take you from zero to confident with the Dynatrace Query Language. Pick a track based on where you are today.
                   </Paragraph>
                   {hasAnyProgress && (
-                    <Chip color="primary">{progress.completedCases.length} lesson{progress.completedCases.length !== 1 ? "s" : ""} completed</Chip>
+                    <Chip color="primary">
+                      {`${progress.completedCases.length} ${progress.completedCases.length === 1 ? "lesson" : "lessons"} completed`}
+                    </Chip>
                   )}
                 </Flex>
 
@@ -135,9 +134,7 @@ export const Home = () => {
                     <Flex flexDirection="column" padding={16} gap={8}>
                       <Flex justifyContent="space-between" alignItems="center">
                         <Strong>Onboarding</Strong>
-                        <Chip>
-                          {onboardingDone}/{onboardingScenarios.length}
-                        </Chip>
+                        <Chip>{`${onboardingDone} / ${onboardingScenarios.length}`}</Chip>
                       </Flex>
                       <Paragraph style={{ margin: 0 }}>
                         Brand new to DQL? Start here. Six bite-sized lessons walk you through the essential commands — <Strong>fetch</Strong>, <Strong>filter</Strong>, <Strong>summarize</Strong>, <Strong>sort</Strong> — so you can read and write basic queries with confidence before moving on.
@@ -162,9 +159,7 @@ export const Home = () => {
                     <Flex flexDirection="column" padding={16} gap={8}>
                       <Flex justifyContent="space-between" alignItems="center">
                         <Strong>DQL Lessons</Strong>
-                        <Chip>
-                          {dqlDone}/{dqlScenarios.length}
-                        </Chip>
+                        <Chip>{`${dqlDone} / ${dqlScenarios.length}`}</Chip>
                       </Flex>
                       <Paragraph style={{ margin: 0 }}>
                         Already know the basics? Go deeper. These lessons cover parsing, aggregation, join, append, log analysis, and advanced patterns — each tied to a real-world scenario you'd encounter in a Dynatrace environment.
@@ -181,9 +176,9 @@ export const Home = () => {
                   </Surface>
                 </Flex>
 
-                {/* ── Continue / Resume button ── */}
+                {/* ── Continue / Resume button — pinned to card bottom ── */}
                 {resumeScenario ? (
-                  <Flex flexDirection="column" gap={8}>
+                  <Flex flexDirection="column" gap={8} style={{ marginTop: "auto" }}>
                     <Flex alignItems="center" gap={8}>
                       <Paragraph style={{ margin: 0 }}>
                         Up next: <Strong>{resumeScenario.title}</Strong>
@@ -198,7 +193,7 @@ export const Home = () => {
                     </Button>
                   </Flex>
                 ) : (
-                  <Button variant="accent" as={RouterLink} to="/learn">
+                  <Button variant="accent" as={RouterLink} to="/learn" style={{ marginTop: "auto" }}>
                     Review all lessons →
                   </Button>
                 )}
@@ -207,11 +202,11 @@ export const Home = () => {
           </Surface>
 
           {/* ── Card 2: Sandbox ── */}
-          <Surface>
-            <Flex flexDirection="column" gap={0}>
+          <Surface style={{ height: "100%" }}>
+            <Flex flexDirection="column" gap={0} style={{ height: "100%" }}>
               <CardImage src={IMG_SANDBOX} fallbackGradient={GRAD_SANDBOX} alt="Sandbox" />
 
-              <Flex flexDirection="column" padding={24} gap={20}>
+              <Flex flexDirection="column" padding={24} gap={20} style={{ flexGrow: 1 }}>
                 <Flex flexDirection="column" gap={6}>
                   <Heading level={2} style={{ margin: 0 }}>Sandbox</Heading>
                   <Paragraph style={{ margin: 0 }}>
@@ -239,7 +234,7 @@ export const Home = () => {
                   </Surface>
                 </Flex>
 
-                <Button variant="accent" as={RouterLink} to="/sandbox">
+                <Button variant="accent" as={RouterLink} to="/sandbox" style={{ marginTop: "auto" }}>
                   Open Sandbox →
                 </Button>
               </Flex>
@@ -247,11 +242,11 @@ export const Home = () => {
           </Surface>
 
           {/* ── Card 3: Log Hunt ── */}
-          <Surface>
-            <Flex flexDirection="column" gap={0}>
+          <Surface style={{ height: "100%" }}>
+            <Flex flexDirection="column" gap={0} style={{ height: "100%" }}>
               <CardImage src={IMG_LOG_HUNT} fallbackGradient={GRAD_LOG_HUNT} alt="Log Hunt" />
 
-              <Flex flexDirection="column" padding={24} gap={20}>
+              <Flex flexDirection="column" padding={24} gap={20} style={{ flexGrow: 1 }}>
                 <Flex flexDirection="column" gap={6}>
                   <Heading level={2} style={{ margin: 0 }}>Log Hunt</Heading>
                   <Flex gap={8} alignItems="center">
@@ -260,7 +255,7 @@ export const Home = () => {
                     </Paragraph>
                   </Flex>
                   {huntsDone > 0 && (
-                    <Chip color="success">{huntsDone} / {logHuntScenarios.length} cases closed</Chip>
+                    <Chip color="success">{`${huntsDone} / ${logHuntScenarios.length} cases closed`}</Chip>
                   )}
                 </Flex>
 
@@ -286,7 +281,7 @@ export const Home = () => {
                   </Surface>
                 </Flex>
 
-                <Button variant="accent" as={RouterLink} to="/log-hunt">
+                <Button variant="accent" as={RouterLink} to="/log-hunt" style={{ marginTop: "auto" }}>
                   Browse hunts →
                 </Button>
               </Flex>
