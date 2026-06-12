@@ -17,9 +17,10 @@ import { logHuntScenarios } from "../lib/dql/log-hunt-scenarios";
 // learn-dql/ui/assets/home-learn-dql.png  → the Dynatrace Learn DQL logo
 // learn-dql/ui/assets/home-sandbox.png    → the Sandbox illustration
 // learn-dql/ui/assets/home-log-hunt.png   → the Log Hunt robot illustration
-const IMG_LEARN  = new URL("../../assets/home-learn-dql.png",  import.meta.url).href;
-const IMG_SANDBOX = new URL("../../assets/home-sandbox.png",   import.meta.url).href;
-const IMG_LOG_HUNT = new URL("../../assets/home-log-hunt.png", import.meta.url).href;
+// When an image is missing the CSS gradient fallback is used automatically.
+const IMG_LEARN    = "/assets/home-learn-dql.png";
+const IMG_SANDBOX  = "/assets/home-sandbox.png";
+const IMG_LOG_HUNT = "/assets/home-log-hunt.png";
 
 // ─── Gradient fallbacks (used while images haven't been placed yet) ──────────
 const GRAD_LEARN =
