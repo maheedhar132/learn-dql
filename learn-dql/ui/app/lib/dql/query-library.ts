@@ -37,11 +37,11 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Extract status codes from log content using parse.",
     difficulty: "intermediate",
     query: `fetch logs, from: -24h
-| parse content, "INT:http_status"
+| parse content, "LD INT:http_status"
 | filter http_status >= 400
 | summarize error_count = count(), by:{http_status}
 | sort error_count desc`,
-    explanation: "Uses the parse command with a typed capture group (INT:) to extract numeric HTTP status codes from unstructured log content. Then filters for 4xx/5xx errors and aggregates counts per status code.",
+    explanation: "Uses the parse command with a typed matcher (INT:) to extract numeric HTTP status codes from unstructured log content. DPL patterns match from the start of the field, so LD (line data) skips arbitrary leading text up to the first integer. Then filters for 4xx/5xx errors and aggregates counts per status code.",
     xpReward: 10,
   },
   {
@@ -52,7 +52,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     difficulty: "intermediate",
     query: `fetch logs, from: -6h
 | filter log.source == "database"
-| parse content, "DURATION:query_time"
+| parse content, "LD DURATION:query_time"
 | filter query_time > 500ms
 | fields timestamp, query_time, content
 | sort query_time desc
@@ -70,7 +70,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     query: `fetch logs, from: -1h
 | filter log.source == "auth-service"
 | filter content ~ "Login failed"
-| parse content, "IPADDR:source_ip"
+| parse content, "LD IPADDR:source_ip"
 | summarize failures = count(), by:{source_ip}
 | filter failures >= 10
 | fieldsAdd risk_level = if(failures >= 50, "critical", "warning")`,
@@ -84,9 +84,8 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Track log ingestion volume over time.",
     difficulty: "intermediate",
     query: `fetch logs, from: -24h
-| makeTimeseries volume = count(), interval: 1h
-| fieldsAdd hour = formatTimestamp(timestamp, "HH:mm")`,
-    explanation: "Creates a time-series of log counts bucketed into hourly intervals. Useful for spotting ingestion spikes or drops.",
+| makeTimeseries volume = count(), interval: 1h, default: 0`,
+    explanation: "Creates a time-series of log counts bucketed into hourly intervals. default: 0 fills empty buckets with zero instead of leaving gaps. The output is one row per series with the bucketed values in an array — there is no per-record timestamp after makeTimeseries. Useful for spotting ingestion spikes or drops.",
     xpReward: 10,
   },
 
@@ -185,12 +184,12 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Track conversion from order to payment to fulfillment.",
     difficulty: "intermediate",
     query: `fetch bizevents, from: -24h
-| filter event.type in array("com.acme.order_confirmed", "com.acme.payment_confirmed", "com.acme.close_order")
+| filter in(event.type, array("com.acme.order_confirmed", "com.acme.payment_confirmed", "com.acme.close_order"))
 | summarize count = count(), by:{event.type}
 | fieldsAdd step = if(event.type == "com.acme.order_confirmed", "Order",
     if(event.type == "com.acme.payment_confirmed", "Payment", "Fulfilled"))
 | sort count desc`,
-    explanation: "Aggregates business events by type to build a simple funnel view. Shows how many orders made it through each stage.",
+    explanation: "Aggregates business events by type to build a simple funnel view. in() is a function in DQL — in(value, array(...)) — not an infix operator. Shows how many orders made it through each stage.",
     xpReward: 10,
   },
   {
@@ -227,34 +226,65 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     xpReward: 15,
   },
 
-  // Joins & Correlation
+  // Joins & Correlation — subqueries always go in square brackets [ ... ]
   {
     id: "q-join-001",
     category: "joins",
-    title: "Correlate Logs with Spans",
-    description: "Join log errors with their trace spans.",
-    difficulty: "advanced",
-    query: `fetch logs, from: -1h
+    title: "Understanding append (UNION ALL)",
+    description: "Stack two datasets vertically into one result — logs plus deployment events.",
+    difficulty: "intermediate",
+    query: `fetch logs, from: -6h
 | filter loglevel == "ERROR"
-| join (fetch spans, from: -1h), on:{trace_id}
-| fields timestamp, span.name, content, service.name`,
-    explanation: "Uses the join command to correlate error logs with their corresponding spans using the shared trace_id field. Essential for root cause analysis.",
-    xpReward: 15,
+| append [fetch events, from: -6h | filter event.type == "deployment"]
+| sort timestamp desc
+| limit 100`,
+    explanation: "append stacks the subquery's records below the current result — UNION ALL semantics: original fields stay intact and duplicates are preserved. It does NOT match records on a key (that is join's job); use it to build mixed timelines, e.g. 'did a deployment coincide with these errors?'. The subquery goes in square brackets, and best practice is to filter inside the brackets so the appended set stays small.",
+    xpReward: 10,
     liveOnly: true,
   },
   {
     id: "q-join-002",
     category: "joins",
-    title: "Append Events to Logs",
-    description: "Union log errors with deployment events.",
-    difficulty: "intermediate",
-    query: `fetch logs, from: -6h
+    title: "Understanding join (inner)",
+    description: "Correlate log errors with their trace spans on a shared key.",
+    difficulty: "advanced",
+    query: `fetch logs, from: -1h
 | filter loglevel == "ERROR"
-| append (fetch events, from: -6h | filter event.type == "deployment")
-| sort timestamp desc
-| limit 100`,
-    explanation: "The append command unions two datasets. This is useful for creating timelines that mix logs and events (e.g., 'did a deployment coincide with errors?').",
-    xpReward: 10,
+| join [fetch spans, from: -1h], on: {trace_id}
+| fields timestamp, content, right.span.name, right.duration`,
+    explanation: "join matches records horizontally on a key — here the shared trace_id. The default kind is inner: only rows with a match on BOTH sides survive. Fields coming from the subquery are prefixed with right. unless you set prefix:. Three caveats from the docs: (1) the right side is capped at 128 MB, so always put the smaller, pre-filtered dataset in the brackets; (2) null key values never match — even null == null is dropped; (3) for different key names use on: {left[fieldA] == right[fieldB]}.",
+    xpReward: 15,
+    liveOnly: true,
+  },
+  {
+    id: "q-join-003",
+    category: "joins",
+    title: "Left Outer Join — Keep All Left Records",
+    description: "Enrich logs with matching events without losing unmatched log lines.",
+    difficulty: "advanced",
+    query: `fetch logs, from: -2h
+| join kind: leftOuter,
+    on: {host},
+    [fetch events, from: -2h | filter event.type == "error"]
+| fields timestamp, host, loglevel, right.event.type`,
+    explanation: "kind: leftOuter keeps every left-side record; where no right-side match exists the right. fields are null instead of the row being dropped. Use this when enrichment is optional and losing records would skew your analysis. The third kind, outer, additionally keeps unmatched right-side records. The 128 MB right-side limit and the null-keys-never-match rule apply to all kinds.",
+    xpReward: 15,
+    liveOnly: true,
+  },
+  {
+    id: "q-join-004",
+    category: "joins",
+    title: "Understanding lookup (enrichment)",
+    description: "Add host entity metadata to log records — the efficient alternative to join.",
+    difficulty: "advanced",
+    query: `fetch logs, from: -1h
+| lookup [fetch dt.entity.host | fields id, entity.name, osType],
+    sourceField: dt.source_entity,
+    lookupField: id,
+    prefix: "host."
+| fields timestamp, content, host.entity.name, host.osType`,
+    explanation: "lookup is purpose-built for enrichment: it matches sourceField (left) against lookupField (right) and copies the right-side fields onto each record, prefixed (default prefix is lookup.). Unlike join, if several right-side rows match, only the top one is taken — so the left record count never changes — and unmatched records are kept with nulls (left-outer semantics). Null keys never match and the lookup table is capped at 128 MB, so project only the fields you need inside the brackets.",
+    xpReward: 15,
     liveOnly: true,
   },
 
@@ -313,12 +343,13 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     difficulty: "advanced",
     query: `fetch logs, from: -6h
 | filter log.source == "web-server"
-| parse content, "IPADDR:client_ip \"TIMESTAMP:req_time \"STRING:method \"STRING:path \"INT:status_code \"LONG:response_size"
+| parse content, "IPADDR:client_ip ' ' LD ' ' INT:status_code ' ' LONG:response_size"
 | filter status_code >= 400
-| summarize count = count(), by:{status_code, path}
+| summarize count = count(), by:{status_code}
 | sort count desc`,
-    explanation: "Demonstrates a complex parse pattern extracting IP, timestamp, HTTP method, path, status code, and response size in one command. The parse command supports multiple typed capture groups separated by literals.",
+    explanation: "Demonstrates a multi-token parse pattern extracting IP, status code, and response size in one command. In DPL, matchers are sequenced with explicit separators — the quoted ' ' literals match the spaces between tokens, and LD skips over the variable middle part of the line. Typed matchers (IPADDR:, INT:, LONG:) cast extracted values automatically.",
     xpReward: 15,
+    liveOnly: true,
   },
 
   // ── System Queries (free — no DDU cost) ────────────────────────────────────
@@ -427,12 +458,13 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     difficulty: "advanced",
     query: `fetch logs, from: now() - 1h
 | filter loglevel == "ERROR"
-| lookup sourceField:dt.entity.host, lookupField:entityId,
-    [fetch dt.entity.host | fields entityId, entity.name, tags, managementZones],
-    prefix: host.
+| lookup [fetch dt.entity.host | fields id, entity.name, tags, managementZones],
+    sourceField: dt.source_entity,
+    lookupField: id,
+    prefix: "host."
 | fields timestamp, content, host.entity.name, host.managementZones
 | sort timestamp desc`,
-    explanation: "Uses lookup (not join) to enrich log records with entity metadata. lookup is more efficient than join for enrichment: it only retrieves the top match per key and has left-outer semantics by default. The 128 MB limit still applies to the lookup table.",
+    explanation: "Uses lookup (not join) to enrich log records with entity metadata. The lookup table subquery comes first in square brackets; the entity model's key column is id, matched here against the log record's dt.source_entity. lookup is more efficient than join for enrichment: it only retrieves the top match per key and has left-outer semantics. The 128 MB limit still applies to the lookup table.",
     xpReward: 15,
     liveOnly: true,
   },
@@ -459,12 +491,14 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Extract key=value pairs from unstructured log content.",
     difficulty: "simple",
     query: `fetch logs, from: now() - 1h
-| parse content, KVP:fields
+| parse content, "KVP:kv"
+| fieldsAdd user = kv[user], action = kv[action], outcome = kv[outcome]
 | filter isNotNull(user)
 | fields timestamp, user, action, outcome
 | sort timestamp desc`,
-    explanation: "The KVP (key-value pair) pattern in parse extracts key=value tokens from a log line. It's the simplest parse form — ideal for structured-but-not-JSON application logs that emit key=value formatted content.",
+    explanation: "The KVP (key-value pair) matcher extracts key=value tokens from a log line into a single record field (here kv). The DPL pattern is always a quoted string, and individual pairs are accessed with bracket notation — kv[user] — then promoted to top-level fields with fieldsAdd. Ideal for structured-but-not-JSON application logs.",
     xpReward: 10,
+    liveOnly: true,
   },
   {
     id: "q-parse-004",
@@ -474,12 +508,13 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     difficulty: "advanced",
     query: `fetch logs, from: now() - 6h
 | filter log.source == "nginx-access"
-| parse content, "IPADDR:client_ip LD INT:status_code LONG:bytes_sent"
+| parse content, "IPADDR:client_ip ' ' LD ' ' INT:status_code ' ' LONG:bytes_sent"
 | filter status_code >= 400
 | summarize errors = count(), by: {client_ip, status_code}
 | sort errors desc`,
-    explanation: "Typed tokens (IPADDR:, INT:, LONG:, DOUBLE:, DATA:, STRING:) extract values and cast them automatically. LD (literal delimiter) matches any characters up to the next token. This is the most powerful parse form for Nginx/Apache access log analysis.",
+    explanation: "Typed matchers (IPADDR:, INT:, LONG:, DOUBLE:, DATA:, STRING:) extract values and cast them automatically. LD (line data) matches any characters up to the next matcher, and the quoted ' ' literals anchor the pattern on the spaces between tokens. This is the workhorse parse form for Nginx/Apache access log analysis.",
     xpReward: 15,
+    liveOnly: true,
   },
   {
     id: "q-parse-005",
@@ -488,14 +523,15 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     description: "Parse JSON-formatted log content and aggregate over extracted fields.",
     difficulty: "intermediate",
     query: `fetch logs, from: now() - 1h
-| parse content, JSON:parsed
-| filter isNotNull(parsed.level)
-| fields timestamp, parsed.level, parsed.message, parsed.service, parsed.trace_id
-| filter parsed.level == "error"
+| parse content, "JSON:json"
+| fieldsAdd level = json[level], message = json[message], service = json[service]
+| filter level == "error"
+| fields timestamp, level, message, service
 | sort timestamp desc
 | limit 100`,
-    explanation: "JSON:fieldName parses the entire content field as JSON and spreads all keys into the record. Works for structured JSON logs where the whole message body is a JSON object. Use jsonPath() instead when you need selective extraction from nested JSON.",
+    explanation: "The JSON matcher parses the whole content field as a JSON object into a single record field (here json). Individual keys are accessed with bracket notation — json[level] — and promoted to top-level fields with fieldsAdd. Works for structured JSON logs where the entire message body is one JSON object.",
     xpReward: 10,
+    liveOnly: true,
   },
 ];
 

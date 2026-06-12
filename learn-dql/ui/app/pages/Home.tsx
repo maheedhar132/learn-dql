@@ -12,6 +12,7 @@ import { DQLSignetIcon } from "@dynatrace/strato-icons";
 import { ALL_SCENARIOS } from "../lib/dql";
 import { getProgress } from "../lib/progress";
 import { logHuntScenarios } from "../lib/dql/log-hunt-scenarios";
+import { QUERY_LIBRARY, getAllCategories } from "../lib/dql/query-library";
 
 // Asset paths are relative to the served index.html (dt-app convention —
 // same as ./assets/Dynatrace_Logo.svg elsewhere in the app).
@@ -289,6 +290,27 @@ export const Home = () => {
           </Surface>
 
         </Grid>
+
+        {/* ── Reference query pack — bottom right ── */}
+        <Flex justifyContent="flex-end" paddingTop={24}>
+          <Surface style={{ maxWidth: 460 }}>
+            <Flex flexDirection="column" padding={20} gap={8}>
+              <Flex gap={8} alignItems="center">
+                <Strong>Reference query pack</Strong>
+                <Chip>{`${QUERY_LIBRARY.length} queries`}</Chip>
+                <Chip>{`${getAllCategories().length} categories`}</Chip>
+              </Flex>
+              <Paragraph style={{ margin: 0 }}>
+                Documentation-verified DQL queries you can copy and adapt — filtering,
+                parsing, aggregation, timeseries metrics, and the correlation commands
+                (append, join, lookup), each with an explanation of how and when to use it.
+              </Paragraph>
+              <Button as={RouterLink} to="/codex" style={{ alignSelf: "flex-end" }}>
+                Browse reference queries →
+              </Button>
+            </Flex>
+          </Surface>
+        </Flex>
       </Flex>
     </Flex>
   );
