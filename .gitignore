@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Claude Code agent worktrees (ephemeral scratch space)
+.claude/worktrees/
