@@ -1,5 +1,5 @@
 export type QueryDifficulty = "simple" | "intermediate" | "advanced";
-export type QueryCategory = "logs" | "metrics" | "spans" | "bizevents" | "joins" | "aggregation" | "parsing" | "system" | "entities";
+export type QueryCategory = "logs" | "metrics" | "spans" | "bizevents" | "joins" | "aggregation" | "parsing" | "arrays" | "system" | "entities";
 
 export interface QueryEntry {
   id: string;
@@ -526,6 +526,120 @@ export const QUERY_LIBRARY: QueryEntry[] = [
     explanation: "The JSON matcher parses the whole content field as a JSON object into a single record field (here json). Individual keys are accessed with bracket notation — json[level] — and promoted to top-level fields with fieldsAdd. Works for structured JSON logs where the entire message body is one JSON object. Try it in the sandbox with the JSON Logs dataset.",
     xpReward: 10,
   },
+
+  // ── Array Operations ──────────────────────────────────────────────────────
+
+  {
+    id: "q-arr-001",
+    category: "arrays",
+    title: "iAny — test condition across array elements",
+    description: "Use iAny() to filter spans that contain at least one exception event in their span.events array.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 1h
+| filter iAny(span.events[][span_event.name] == "exception")`,
+    explanation: "iAny(expr) returns true if the iterative expression is true for at least one element in the array being iterated. The [][] operator iterates over the span.events array and extracts the span_event.name field from each element. iAll() does NOT exist in DQL — use iAny() only. This pattern is the canonical way to filter on nested array content in spans.",
+    xpReward: 20,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-002",
+    category: "arrays",
+    title: "expand — flatten array field into rows",
+    description: "After filtering spans with exceptions, expand the span.events array so each event becomes its own record row.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 1h
+| filter iAny(span.events[][span_event.name] == "exception")
+| expand span.events
+| filter span.events[span_event.name] == "exception"
+| fields timestamp, "service.name", "span.name", span.events`,
+    explanation: "expand array_field turns each array element into a separate record — a CROSS JOIN UNNEST in SQL terms. After expand, span.events in each row is a single event record (not an array), so you access its nested fields with bracket notation: span.events[span_event.name]. Use filter after expand to keep only the event type you care about. Optional limit: N caps the expansion.",
+    xpReward: 20,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-003",
+    category: "arrays",
+    title: "fieldsFlatten — promote nested fields to top level",
+    description: "Flatten a nested exception event record into individual top-level fields for easy filtering and grouping.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 1h
+| filter iAny(span.events[][span_event.name] == "exception")
+| expand span.events
+| filter span.events[span_event.name] == "exception"
+| fieldsFlatten span.events, fields: {"exception.type", "exception.message"}
+| summarize count = count(), by: {"exception.type"}
+| sort count desc`,
+    explanation: "fieldsFlatten expression [, prefix] [, fields: {a, b}] [, depth] promotes nested record fields to the top level. The fields: option limits which sub-fields are extracted — critical for wide schemas. Without a prefix the sub-field names are used as-is (exception.type remains exception.type). Combine with expand to turn span event arrays into analysable flat records.",
+    xpReward: 25,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-004",
+    category: "arrays",
+    title: "makeTimeseries on span events — exception rate over time",
+    description: "Count exceptions per service per hour using makeTimeseries on span data. Uses time: to specify the timestamp field.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 2h
+| filter iAny(span.events[][span_event.name] == "exception")
+| expand span.events
+| filter span.events[span_event.name] == "exception"
+| fieldsFlatten span.events, fields: {"exception.type"}
+| makeTimeseries exceptions = count(), interval: 5m, by: {"service.name"}`,
+    explanation: "makeTimeseries aggregates event-level data (logs, spans, bizevents) into time buckets. For spans the timestamp comes from the span start_time — use time: start_time if you need to reference it explicitly. Output: one row per series (per service.name here), with a timeseries array field and a corresponding time array. The values array is indexed in sync with time. Add default: 0 to fill empty buckets. Contrast with timeseries (metrics only).",
+    xpReward: 25,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-005",
+    category: "arrays",
+    title: "arraySort, arraySize, arrayDistinct — array manipulation",
+    description: "Apply array functions to a makeTimeseries output to compute derived statistics from the value arrays.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 2h
+| makeTimeseries req_count = count(), interval: 5m, by: {"service.name"}
+| fieldsAdd sorted_vals = arraySort(req_count, direction: "descending")
+| fieldsAdd peak = arrayFirst(sorted_vals)
+| fieldsAdd total_buckets = arraySize(req_count)
+| fields "service.name", peak, total_buckets`,
+    explanation: "After makeTimeseries, req_count is an array of numbers (one per time bucket). arraySort(array, direction: \"ascending\"|\"descending\") returns a sorted copy. arrayFirst / arrayLast extract the first or last element. arraySize returns element count. Note: arrayLength() does NOT exist — always use arraySize(). arrayDistinct removes duplicates. These functions operate on any array field, not just timeseries output.",
+    xpReward: 20,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-006",
+    category: "arrays",
+    title: "arrayMovingAvg and arrayCumulativeSum — trend analysis",
+    description: "Smooth a time-series with a moving average and compute a running total to detect trends.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 6h
+| makeTimeseries req_count = count(), interval: 15m, by: {"service.name"}
+| fieldsAdd smoothed = arrayMovingAvg(req_count, 4)
+| fieldsAdd running_total = arrayCumulativeSum(req_count)
+| fieldsAdd delta = arrayDelta(req_count)
+| fields "service.name", time, req_count, smoothed, running_total, delta`,
+    explanation: "arrayMovingAvg(array, window) computes a sliding window average — useful for smoothing spiky time-series. arrayCumulativeSum returns a running total array of the same length. arrayDelta returns the element-by-element difference from the previous value (position 0 is always 0). All three preserve the original array length. Use these after makeTimeseries to detect trends, saturation, or sustained anomalies.",
+    xpReward: 25,
+    liveOnly: true,
+  },
+  {
+    id: "q-arr-007",
+    category: "arrays",
+    title: "joinNested — embed matching records as an array field",
+    description: "Enrich each span with its related log events as a nested array field, without losing unmatched spans.",
+    difficulty: "advanced",
+    query: `fetch spans, from: now() - 1h
+| joinNested related_logs = [
+    fetch logs, from: now() - 1h
+    | filter loglevel == "ERROR"
+    | fields timestamp, content, "service.name", trace_id
+  ], on: trace_id == trace_id
+| fieldsAdd log_count = arraySize(related_logs)
+| filter log_count > 0
+| sort log_count desc`,
+    explanation: "joinNested alias = [subquery] [, on: condition] [, fields: {...}] adds all matching right-side records as an array field named by alias (here: related_logs). Semantics are left-outer: every left record appears; the array is empty (not null) when there are no matches. The right-side dataset is capped at 128 MB — filter and project inside the [...] block to stay under the limit. Use arraySize() to count matches.",
+    xpReward: 30,
+    liveOnly: true,
+  },
 ];
 
 export function getQueriesByCategory(category: QueryCategory): QueryEntry[] {
@@ -537,7 +651,7 @@ export function getQueriesByDifficulty(difficulty: QueryDifficulty): QueryEntry[
 }
 
 export function getAllCategories(): { id: QueryCategory; label: string; count: number }[] {
-  const cats: QueryCategory[] = ["logs", "metrics", "spans", "bizevents", "joins", "aggregation", "parsing", "system", "entities"];
+  const cats: QueryCategory[] = ["logs", "metrics", "spans", "bizevents", "joins", "aggregation", "parsing", "arrays", "system", "entities"];
   return cats.map((id) => ({
     id,
     label: id === "system" ? "System (Free)" : id === "entities" ? "Entities (Free)" : id.charAt(0).toUpperCase() + id.slice(1),
