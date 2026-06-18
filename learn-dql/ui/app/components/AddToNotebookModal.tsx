@@ -48,7 +48,7 @@ export const AddToNotebookModal = ({
     setErrorMsg("");
     try {
       const result = await documentsClient.listDocuments({
-        filter: 'type == "notebook"',
+        filter: "type == 'notebook'",
       });
       setNotebooks(result.documents ?? []);
       setStatus("idle");
@@ -198,9 +198,8 @@ export const AddToNotebookModal = ({
                 <Button
                   variant={mode === "create" ? "accent" : "default"}
                   onClick={() => setMode("create")}
-                  prefixIcon={<PlusIcon />}
                 >
-                  Create new
+                  <PlusIcon /> Create new
                 </Button>
               </Flex>
 

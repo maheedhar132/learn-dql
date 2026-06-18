@@ -104,8 +104,8 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
               explanation={entry.explanation}
               query={entry.query}
               onTrigger={(open) => (
-                <Button variant="default" onClick={open} prefixIcon={<BookmarkIcon />}>
-                  Add to Notebook
+                <Button variant="default" onClick={open}>
+                  <BookmarkIcon /> Add to Notebook
                 </Button>
               )}
             />
