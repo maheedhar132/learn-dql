@@ -87,7 +87,7 @@ export const ResultTable = ({
       {
         id: "_row",
         accessor: "_row" as keyof DQLRecord,
-        header: (): string => "#",
+        header: () => <span>#</span>,
         label: "#",
         disableSorting: true,
         width: "content" as const,
