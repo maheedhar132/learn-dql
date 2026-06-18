@@ -14,7 +14,9 @@
       { "name": "storage:bizevents:read", "comment": "Read business events" },
       { "name": "storage:metrics:read", "comment": "Read metrics for timeseries queries" },
       { "name": "storage:system:read", "comment": "Read dt.system.* tables (query executions, deployments)" },
-      { "name": "storage:entities:read", "comment": "Read entity model for lookup/join scenarios and dt.entity.* queries" }
+      { "name": "storage:entities:read", "comment": "Read entity model for lookup/join scenarios and dt.entity.* queries" },
+      { "name": "document:documents:read", "comment": "List user's notebooks to support Add to Notebook flow" },
+      { "name": "document:documents:write", "comment": "Create new notebooks and append queries to existing ones" }
     ]
   }
 }

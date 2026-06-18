@@ -8,12 +8,14 @@ import {
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Chip, CodeSnippet, ExpandableText, EmptyState } from "@dynatrace/strato-components/content";
 import { SearchInput } from "@dynatrace/strato-components/forms";
+import { BookmarkIcon } from "@dynatrace/strato-icons";
 import {
   QUERY_LIBRARY,
   getAllCategories,
   type QueryCategory,
   type QueryDifficulty,
 } from "../lib/dql/query-library";
+import { AddToNotebookModal } from "../components/AddToNotebookModal";
 
 const CATEGORY_ICONS: Record<QueryCategory, string> = {
   logs: "📋",
@@ -23,6 +25,7 @@ const CATEGORY_ICONS: Record<QueryCategory, string> = {
   joins: "🔀",
   aggregation: "∑",
   parsing: "🔍",
+  arrays: "[]",
   system: "⚙️",
   entities: "🏗️",
 };
@@ -87,17 +90,26 @@ const QueryCard = ({ entry, onTryInSandbox }: QueryCardProps) => {
         <Divider />
 
         {/* Footer row */}
-        <Flex justifyContent="space-between" alignItems="center">
+        <Flex justifyContent="space-between" alignItems="center" gap={8}>
           <Chip>+{entry.xpReward} XP</Chip>
-          {entry.liveOnly ? (
-            <Paragraph style={{ margin: 0 }}>
-              Copy into a live Dynatrace Notebook to run
-            </Paragraph>
-          ) : (
-            <Button variant="default" onClick={onTryInSandbox}>
-              Try in Sandbox →
-            </Button>
-          )}
+          <Flex gap={8} alignItems="center">
+            {!entry.liveOnly && (
+              <Button variant="default" onClick={onTryInSandbox}>
+                Try in Sandbox →
+              </Button>
+            )}
+            <AddToNotebookModal
+              title={entry.title}
+              description={entry.description}
+              explanation={entry.explanation}
+              query={entry.query}
+              onTrigger={(open) => (
+                <Button variant="default" onClick={open} prefixIcon={<BookmarkIcon />}>
+                  Add to Notebook
+                </Button>
+              )}
+            />
+          </Flex>
         </Flex>
       </Flex>
     </Surface>
