@@ -154,6 +154,6 @@ Declared in `app.config.json` — no manual setup needed:
 
 ---
 
----
+<br/>
 
-*Built with ❤️ by Mahee and Claude*
+> Built with ❤️ by Mahee and Claude
