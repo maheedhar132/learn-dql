@@ -6,7 +6,7 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Select, TextInput, Label } from "@dynatrace/strato-components/forms";
 import { PlusIcon } from "@dynatrace/strato-icons";
 import { documentsClient } from "@dynatrace-sdk/client-document";
-import { navigation } from "@dynatrace-sdk/navigation";
+import { openDocument } from "@dynatrace-sdk/navigation";
 import type { DocumentMetaData } from "@dynatrace-sdk/client-document";
 import {
   buildMarkdownSection,
@@ -94,7 +94,7 @@ export const AddToNotebookModal = ({
         body: { name, type: "notebook", content: notebookToBlob(notebook) },
       });
       setIsOpen(false);
-      navigation.openDocument(doc.id);
+      openDocument(doc.id);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to create notebook");
       setStatus("error");
@@ -123,7 +123,7 @@ export const AddToNotebookModal = ({
         body: { content: notebookToBlob(existing) },
       });
       setIsOpen(false);
-      navigation.openDocument(selectedId);
+      openDocument(selectedId);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to update notebook");
       setStatus("error");
