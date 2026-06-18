@@ -11,6 +11,7 @@ import { Button, RunQueryButton } from "@dynatrace/strato-components/buttons";
 import { Chip, MessageContainer } from "@dynatrace/strato-components/content";
 import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { runQuery, type RunOutcome } from "../lib/validate";
+import { AddToNotebookModal } from "../components/AddToNotebookModal";
 import {
   generateAppLogs,
   generateAuthLogs,
@@ -392,7 +393,7 @@ export const Sandbox = () => {
           {/* ── Left: editor + results ── */}
           <Flex flexDirection="column" gap={12}>
             <DQLEditor value={query} onChange={(v) => setQuery(v)} />
-            <Flex gap={8} alignItems="center">
+            <Flex gap={8} alignItems="center" flexWrap="wrap">
               <RunQueryButton
                 queryState={queryState}
                 disabled={!query.trim()}
@@ -406,6 +407,17 @@ export const Sandbox = () => {
               >
                 Clear
               </Button>
+              <AddToNotebookModal
+                title="Sandbox Query"
+                description="Query written in the Learn DQL sandbox."
+                explanation={query.trim() ? `\`\`\`dql\n${query.trim()}\n\`\`\`` : "No query written yet."}
+                query={query}
+                onTrigger={(open) => (
+                  <Button variant="default" onClick={open} disabled={!query.trim()}>
+                    Add to Notebook
+                  </Button>
+                )}
+              />
               <Paragraph style={{ fontSize: "0.75rem", opacity: 0.4, margin: 0 }}>
                 Ctrl+Enter to run
               </Paragraph>
