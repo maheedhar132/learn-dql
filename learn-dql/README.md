@@ -1,93 +1,88 @@
-# Learn DQL — v0.2.0
+# Learn DQL
 
-**The go-to platform for learning, practising, and retaining Dynatrace Query Language (DQL) — without worrying about costs.**
+**The go-to platform for learning, practising, and retaining Dynatrace Query Language — without worrying about costs.**
 
-Built on Dynatrace AppEngine (Strato v3). Runs entirely in the browser with an offline DQL simulation engine.  No Grail DDU consumed during practice. Optional live-environment integration for real log schema discovery.
+Built as a native Dynatrace AppEngine app (Strato v3). Runs entirely in the browser using an offline DQL simulation engine. Zero Grail DDU consumed during practice. Optional live-environment integration for real log schema discovery.
 
 ---
 
-## Features at a glance
+## Getting started
+
+**Step 1 — navigate into the app folder**
+
+```bash
+cd learn-dql
+```
+
+**Step 2 — install dependencies**
+
+```bash
+npm install
+```
+
+**Step 3 — start the development server**
+
+```bash
+npx dt-app dev
+```
+
+The dev server starts on `http://localhost:3000`. Open the URL printed in your terminal inside your Dynatrace environment to run the app with full AppEngine context.
+
+> **Note:** `npm run start` is an alias for `npx dt-app dev` and works equally well once dependencies are installed.
+
+---
+
+## What's inside
 
 | Page | What it does |
 |---|---|
-| **Learn** (`/learn`) | 50+ guided lessons across 18 modules — Beginner → Advanced |
-| **Sandbox** (`/sandbox`) | Free-form DQL editor against seeded sample data |
-| **Notebook** (`/notebook`) | Multi-cell DT-style notebook with 8 data sources, Run All, localStorage save |
-| **Log Hunt** (`/log-hunt`) | 10 mystery investigation scenarios — write your own queries to crack the case |
-| **Reference** (`/codex`) | 35+ searchable production-ready DQL patterns with copy-paste examples |
-| **Settings** (`/settings`) | Live-Seed toggle: pull real log field schema from your DT environment |
+| **Home** (`/`) | Overview, progress tracker, quick links |
+| **Learn** (`/learn`) | 42 guided lessons — Beginner → Advanced, result-based validation |
+| **Log Hunt** (`/log-hunt`) | 30 story-driven investigations — write queries to crack the case |
+| **Sandbox** (`/sandbox`) | Free-form DQL editor, 10 datasets, 2,200+ sample records |
+| **Reference** (`/codex`) | 40+ production-ready DQL patterns, searchable, exportable to Notebook |
+| **Notebook** (`/notebook`) | Multi-cell DT-style notebook with 8 data sources and localStorage save |
+| **Settings** (`/settings`) | Live-Seed toggle — pull real field schema from your DT environment |
+
+---
+
+## How learning works
+
+Write any query that produces the correct result and it passes. The validator checks your **result**, not your syntax — because that is how real DQL works and multiple correct solutions are always accepted.
+
+The Log Hunt cases are story-driven investigations. You receive a dataset and a crime to solve. Coffee shop fraud. Hospital drug diversion. An insider threat in the Finance department. Each one uses a different set of DQL commands — `parse`, `dedup`, `makeTimeseries`, `iAny`, `expand`, `fieldsFlatten`, and more.
+
+---
+
+## Export to Dynatrace Notebook
+
+Any query in the Reference library or the Sandbox can be exported directly to a Dynatrace Notebook in one click. A Markdown tile explaining what the query does is added above the DQL tile, ready to run. Select an existing notebook or create a new one — the app navigates you there automatically.
 
 ---
 
 ## Curriculum coverage
 
-All major DQL commands are taught interactively:
-
-- **Data sources**: `fetch logs`, `fetch spans`, `fetch bizevents`, `fetch events`, `fetch metrics` (concept), `fetch dt.entity.*` (concept), `fetch dt.system.*` (free, concept)
-- **Filtering**: `filter`, `filterOut`, `search`, compound `and`/`or`, `in` operator, `contains`, `startsWith`, `isNull`, `isNotNull`
-- **Shaping**: `fields`, `fieldsAdd`, `fieldsRemove`, `fieldsRename`
+- **Data sources**: `fetch logs`, `fetch spans`, `fetch bizevents`, `fetch events`, `fetch dt.entity.*`, `fetch dt.system.*`
+- **Filtering**: `filter`, `filterOut`, `search`, `in`, `contains`, `startsWith`, `isNull`, `isNotNull`
+- **Shaping**: `fields`, `fieldsAdd`, `fieldsRemove`, `fieldsRename`, `fieldsFlatten`
 - **Sorting & limiting**: `sort`, `limit`
 - **Aggregation**: `summarize` with `count`, `sum`, `avg`, `min`, `max`, `median`, `percentile`, `countIf`, `countDistinct`
-- **Grouping**: `by:{}` single and multi-field, `makeTimeseries` time buckets
-- **Deduplication**: `dedup`
-- **Parsing**: `parse` with JSON, KVP, and typed-capture (IPADDR, INT, LONG, DOUBLE, DATA, STRING, LD) patterns
-- **Joining**: `join` (inner + leftOuter), `append` (union all), `lookup` (enrichment)
-- **Expansion**: `expand` (array → rows), time functions (`getHour`)
-- **Real investigations**: K8s crash analysis, audit trail, MITRE ATT&CK triage, infrastructure health, APM trace analysis
+- **Grouping & timeseries**: `by:{}`, `makeTimeseries` with `interval`, `bins`, `default`, `time:`
+- **Deduplication**: `dedup` with optional `sort:`
+- **Parsing**: `parse` with JSON, KVP, and typed-capture patterns
+- **Joining**: `join` (inner + leftOuter), `append` (union all), `lookup`, `joinNested`
+- **Array operations**: `expand`, `iAny`, `arraySize`, `arraySort`, `arrayMovingAvg`, `arrayCumulativeSum`, `arrayDelta`
 
 ---
 
 ## Free vs charged data
 
-| Query type | Cost | Approach in this app |
+| Query type | Cost | How this app handles it |
 |---|---|---|
-| `fetch logs / spans / bizevents / metrics` | DDU charged | **Seeded sample data** — fully offline |
-| `fetch dt.system.query_executions` | **Free** | Live query (Settings → Reference page) |
-| `fetch dt.entity.*` (host, service, process) | **Free** | Live query (Settings → Reference page) |
-| All lesson scenarios | Zero | Offline simulation engine — no DDU |
-
----
-
-## Live-Seed feature
-
-Go to **Settings → Live Seed from Environment** and enable it. The app will:
-
-1. Fetch 50 recent log records and 50 span records from your connected DT environment
-2. Analyse the field names and types (no content stored — schema only)
-3. Cache the schema in `localStorage`
-4. Surface your real field names as suggestions in the Notebook and Sandbox
-
-Default is **disabled**. Requires `storage:logs:read` and `storage:spans:read` scopes (already declared in `app.config.json`).
-
----
-
-## Prerequisites
-
-- Node.js ≥ 18
-- A Dynatrace environment with AppEngine enabled (required for deployment; local dev works without it)
-- `dt-app` CLI — installed automatically as a dev dependency
-
----
-
-## Quick start
-
-```bash
-npm install
-npm run start        # starts dt-app dev server on http://localhost:3000
-```
-
-The dev server (`dt-app dev`) opens a browser tab connected to the environment in `app.config.json`. Edit any file under `ui/` and the page hot-reloads.
-
----
-
-## Scripts
-
-| Command | Underlying call | Purpose |
-|---|---|---|
-| `npm run start` | `dt-app dev` | Local development server with hot reload |
-| `npm run build` | `dt-app build` | Production bundle (output: `dist/`) |
-| `npm run typecheck` | `tsc --noEmit` | TypeScript type checking |
-| `npm run lint` | `eslint` | Lint source files |
+| `fetch logs / spans / bizevents / metrics` | DDU charged | Seeded sample data — fully offline |
+| `fetch dt.system.*` | **Free** | Live query available via Settings |
+| `fetch dt.entity.*` | **Free** | Live query available via Settings |
+| All lesson and hunt scenarios | Zero | Offline simulation engine — no DDU |
 
 ---
 
@@ -95,59 +90,70 @@ The dev server (`dt-app dev`) opens a browser tab connected to the environment i
 
 ```
 learn-dql/
-├── app.config.json          # App name, version (0.2.0), scopes, env URL
-├── ui/
-│   └── app/
-│       ├── App.tsx           # Route definitions
-│       ├── components/
-│       │   ├── Header.tsx    # Navigation bar
-│       │   └── ResultTable.tsx
-│       ├── lib/
-│       │   ├── dql/
-│       │   │   ├── commands.ts       # Offline DQL command executor (parse, join, lookup, expand…)
-│       │   │   ├── engine.ts         # Pipeline runner
-│       │   │   ├── parser.ts         # DQL text → pipeline steps
-│       │   │   ├── log-generator.ts  # 15+ deterministic sample data generators
-│       │   │   ├── scenarios.ts      # 50+ interactive lesson scenarios
-│       │   │   ├── scenarios-onboarding.ts
-│       │   │   ├── log-hunt-scenarios.ts
-│       │   │   └── query-library.ts  # 35+ reference queries (Codex)
-│       │   ├── settings.ts   # App settings + LiveSeed schema types
-│       │   ├── progress.ts   # localStorage progress tracking
-│       │   ├── validate.ts   # Result-based query validation
-│       │   └── types/
-│       └── pages/
-│           ├── Home.tsx        # Landing page with progress
-│           ├── Learn.tsx       # Lesson catalog
-│           ├── CasePlayer.tsx  # Interactive lesson player
-│           ├── Sandbox.tsx     # Free-form DQL sandbox
-│           ├── Notebook.tsx    # Multi-cell DT notebook
-│           ├── LogHunt.tsx     # Hunt catalog
-│           ├── LogHuntPlayer.tsx
-│           ├── Codex.tsx       # DQL reference library
-│           └── Settings.tsx    # Live-seed and app settings
+├── app.config.json               # App name, scopes, environment URL
+├── package.json
+└── ui/
+    └── app/
+        ├── App.tsx               # Route definitions
+        ├── components/
+        │   ├── Header.tsx
+        │   ├── ResultTable.tsx
+        │   └── AddToNotebookModal.tsx
+        ├── lib/
+        │   ├── notebook.ts       # Notebook JSON builder utilities
+        │   ├── validate.ts       # Result-based query validation
+        │   ├── settings.ts       # App settings + LiveSeed types
+        │   └── dql/
+        │       ├── commands.ts           # Offline DQL command executor
+        │       ├── engine.ts             # Pipeline runner
+        │       ├── parser.ts             # DQL text → pipeline steps
+        │       ├── log-generator.ts      # 15+ deterministic sample data generators
+        │       ├── scenarios.ts          # 42 interactive lesson scenarios
+        │       ├── log-hunt-scenarios.ts # 30 Log Hunt investigation cases
+        │       └── query-library.ts      # 40+ reference queries
+        └── pages/
+            ├── Home.tsx
+            ├── Learn.tsx
+            ├── CasePlayer.tsx
+            ├── Sandbox.tsx
+            ├── Notebook.tsx
+            ├── LogHunt.tsx
+            ├── LogHuntPlayer.tsx
+            ├── Codex.tsx
+            └── Settings.tsx
 ```
-
----
-
-## Offline engine
-
-The simulation engine (`lib/dql/engine.ts` + `commands.ts`) implements:
-
-- Full fetch → filter → shape → aggregate → sort → limit pipeline
-- `parse` with JSON, KVP, and typed-capture group support
-- `join` (inner + leftOuter), `append`, `lookup`, `expand`
-- `makeTimeseries` time bucketing
-- `summarize` with multi-aggregation, `countIf`, `countDistinct`, `percentile`, `median`
-- All string, numeric, conditional, and time functions
-- Result-based validation (any query producing the correct result set passes — multiple solutions accepted)
 
 ---
 
 ## Tech stack
 
 - React 18 + TypeScript 5 strict
-- Vite via `@dynatrace/app-scripts` (`dt-app`)
-- UI: `@dynatrace/strato-components` v3 only — no Tailwind or third-party UI
-- State: React hooks + localStorage (no backend)
+- Vite via `dt-app` (`@dynatrace/app-scripts`)
+- UI: `@dynatrace/strato-components` v3 — no Tailwind, no third-party UI libraries
+- SDKs: `@dynatrace-sdk/client-document`, `@dynatrace-sdk/navigation`, `@dynatrace-sdk/client-query`
+- State: React hooks + `localStorage` — no backend, no database
 - Routing: `react-router-dom` v6
+
+---
+
+## Required scopes
+
+Declared in `app.config.json` — no manual setup needed:
+
+| Scope | Purpose |
+|---|---|
+| `storage:logs:read` | Live-Seed feature |
+| `storage:spans:read` | Live-Seed feature |
+| `storage:events:read` | Reference queries |
+| `storage:bizevents:read` | Reference queries |
+| `storage:metrics:read` | Reference queries |
+| `storage:system:read` | Free system queries |
+| `storage:entities:read` | Free entity queries |
+| `document:documents:read` | List notebooks for Add to Notebook |
+| `document:documents:write` | Create / update notebooks |
+
+---
+
+---
+
+*Built with ❤️ by Mahee and Claude*
