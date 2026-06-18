@@ -132,3 +132,7 @@ Update `environmentUrl` and `app.id` before deploying to a new environment.
 - [Dynatrace Developer — App Toolkit quickstart](https://developer.dynatrace.com/quickstart/app-toolkit/)
 - [Dynatrace Developer Portal](https://developer.dynatrace.com/)
 - [Strato component library](https://developer.dynatrace.com/develop/ui-components/)
+
+---
+
+*Built with ❤️ by Mahee and Claude*
