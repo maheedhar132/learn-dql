@@ -1,6 +1,8 @@
 // App-wide settings persisted to localStorage.
 // Accessed via useSettings() hook from any component.
 
+import type { DQLRecord } from "./types/dql";
+
 const SETTINGS_KEY = "learn-dql.settings.v1";
 
 export interface AppSettings {
@@ -11,6 +13,14 @@ export interface AppSettings {
   liveSeedSchema: LiveSeedSchema | null;
   // ISO timestamp of the last successful live-seed fetch.
   liveSeedFetchedAt: string | null;
+  // 1000 synthetically-generated records derived from the live field scan.
+  liveSeedRecords: DQLRecord[] | null;
+  // User-supplied DQL override for the Sandbox "My environment" dataset.
+  customSeedQuery: string | null;
+  // Raw records returned by the custom query (≤10).
+  customSeedRecords: DQLRecord[] | null;
+  // ISO timestamp of the last successful custom-seed fetch.
+  customSeedFetchedAt: string | null;
 }
 
 export interface LiveSeedField {
@@ -32,6 +42,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   liveSeedEnabled: false,
   liveSeedSchema: null,
   liveSeedFetchedAt: null,
+  liveSeedRecords: null,
+  customSeedQuery: null,
+  customSeedRecords: null,
+  customSeedFetchedAt: null,
 };
 
 export function loadSettings(): AppSettings {
@@ -45,7 +59,11 @@ export function loadSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    throw new Error(`Failed to save settings: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {

@@ -26,10 +26,11 @@ import {
 } from "../lib/dql/log-generator";
 import { ResultTable } from "../components/ResultTable";
 import { loadSettings } from "../lib/settings";
+import { inferColumns } from "../lib/dql/engine";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type DatasetTab = "logs" | "spans" | "events" | "bizevents";
+type DatasetTab = "logs" | "spans" | "events" | "bizevents" | "env";
 type LogVariety = "app" | "auth" | "db" | "nginx" | "k8s" | "audit" | "json";
 
 interface SchemaField {
@@ -298,33 +299,67 @@ export const Sandbox = () => {
     bizevents: generateBizEvents(1500, 42),
   }), []);
 
-  // Resolve the active sample data based on tab + log variety
-  const activeSample = useMemo(() => {
-    if (activeTab === "spans") return allSamples.spans;
-    if (activeTab === "events") return allSamples.events;
-    if (activeTab === "bizevents") return allSamples.bizevents;
-    return allSamples[logVariety];
-  }, [activeTab, logVariety, allSamples]);
-
-  // Resolve the metadata to display in the sidebar
-  const activeInfo: DatasetInfo = useMemo(() => {
-    if (activeTab === "spans") return SPANS_INFO;
-    if (activeTab === "events") return EVENTS_INFO;
-    if (activeTab === "bizevents") return BIZEVENTS_INFO;
-    return LOG_VARIETY_INFO[logVariety];
-  }, [activeTab, logVariety]);
-
-  // Live seed schema from Settings
+  // Live seed schema from Settings (for the field-hint sidebar)
   const liveSchema = useMemo(() => {
     const s = loadSettings();
     return s.liveSeedEnabled && s.liveSeedSchema ? s.liveSeedSchema : null;
   }, []);
 
-  // Auto-detect dataset tab from query, but never auto-change log variety
+  // Environment seed: custom records override env records; nil when nothing fetched
+  const envSeed = useMemo(() => {
+    const s = loadSettings();
+    if (!s.liveSeedEnabled) return null;
+    const records = s.customSeedRecords ?? s.liveSeedRecords;
+    if (!records || records.length === 0) return null;
+    return {
+      records,
+      isCustom: !!s.customSeedRecords,
+      query: s.customSeedQuery,
+    };
+  }, []);
+
+  // Resolve the active sample data based on tab + log variety
+  const activeSample = useMemo(() => {
+    if (activeTab === "env") return envSeed?.records ?? [];
+    if (activeTab === "spans") return allSamples.spans;
+    if (activeTab === "events") return allSamples.events;
+    if (activeTab === "bizevents") return allSamples.bizevents;
+    return allSamples[logVariety];
+  }, [activeTab, logVariety, allSamples, envSeed]);
+
+  // Resolve the metadata to display in the sidebar
+  const activeInfo: DatasetInfo = useMemo(() => {
+    if (activeTab === "env" && envSeed) {
+      const cols = inferColumns(envSeed.records);
+      const sourceTag = envSeed.isCustom ? "custom query" : "sampled logs";
+      return {
+        sourceLabel: `your environment · ${envSeed.records.length} records · ${sourceTag}`,
+        fields: cols.map((c) => ({
+          name: c.name,
+          type: c.type,
+          description: "From your environment",
+        })),
+        exampleQueries: [
+          ...(envSeed.query
+            ? [{ label: "Your seed query", query: envSeed.query }]
+            : []),
+          { label: "First 10 records", query: "fetch logs\n| limit 10" },
+          { label: "Count by log level", query: "fetch logs\n| summarize count(), by:{loglevel}" },
+        ],
+      };
+    }
+    if (activeTab === "spans") return SPANS_INFO;
+    if (activeTab === "events") return EVENTS_INFO;
+    if (activeTab === "bizevents") return BIZEVENTS_INFO;
+    return LOG_VARIETY_INFO[logVariety];
+  }, [activeTab, logVariety, envSeed]);
+
+  // Auto-detect dataset tab from query, but never auto-change log variety or env tab
   useEffect(() => {
+    if (activeTab === "env") return;
     const detected = detectSource(query);
     setActiveTab(detected);
-  }, [query]);
+  }, [query, activeTab]);
 
   const runWithQuery = useCallback(
     (q: string) => {
@@ -496,6 +531,18 @@ export const Sandbox = () => {
                   >
                     Biz Events
                   </Button>
+                  {envSeed && (
+                    <Button
+                      variant={tabButtonVariant("env")}
+                      onClick={() => {
+                        setActiveTab("env");
+                        setQuery(envSeed.query ?? "fetch logs\n| limit 10");
+                        setOutcome(null);
+                      }}
+                    >
+                      My environment <Chip color="success" style={{ fontSize: "0.7rem", marginLeft: 4 }}>Live</Chip>
+                    </Button>
+                  )}
                 </Flex>
               </Flex>
 
