@@ -638,7 +638,7 @@ export const Sandbox = () => {
                           key={f.name}
                           onClick={() =>
                             setQuery((q) =>
-                              q ? `${q} ${f.name}` : `fetch logs\n| fields ${f.name}`,
+                              q ? `${q}\n| fields ${f.name}` : `fetch logs\n| fields ${f.name}`,
                             )
                           }
                           style={{ fontSize: "0.78rem", cursor: "pointer" }}

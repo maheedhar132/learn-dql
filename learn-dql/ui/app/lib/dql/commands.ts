@@ -816,7 +816,16 @@ function resolveValue(token: string, row: DQLRecord): unknown {
   if (t === "false") return false;
   if (t === "null") return null;
   if (!isNaN(Number(t))) return Number(t);
-  return t;
+  // Try dot-path traversal for nested objects (e.g. aws: { account: { id: "..." } })
+  if (t.includes(".")) {
+    let cur: unknown = row;
+    for (const part of t.split(".")) {
+      if (cur == null || typeof cur !== "object") { cur = undefined; break; }
+      cur = (cur as Record<string, unknown>)[part];
+    }
+    if (cur !== undefined) return cur;
+  }
+  return null;
 }
 
 function splitByOperator(condition: string, operator: string): string[] {
@@ -1028,6 +1037,9 @@ function parseAssignments(str: string): [string, string][] {
     const m = part.match(/^([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*([\s\S]+)$/);
     if (m && !m[2].startsWith("=")) {
       pairs.push([m[1].trim(), m[2].trim()]);
+    } else if (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(part.trim())) {
+      // bare field name with no =: self-reference — surface the existing field value
+      pairs.push([part.trim(), part.trim()]);
     }
   }
   return pairs;
