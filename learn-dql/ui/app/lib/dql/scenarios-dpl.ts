@@ -329,13 +329,13 @@ export const dplScenarios: Scenario[] = [
         title: "Parse Apache format",
         narration:
           "Extract IPADDR, timestamp inside brackets, ALPHA method, the path as WORD, INTEGER status, and INTEGER bytes. Use literals for brackets and quotes.",
-        lesson: 'parse content, "IPADDR:ip [WORD:ts] \"ALPHA:method WORD:path INTEGER:status INTEGER:bytes\"',
+        lesson: 'parse content, "IPADDR:ip [WORD:ts] "ALPHA:method WORD:path INTEGER:status INTEGER:bytes"',
         goal: "Extract ip, ts, method, path, status, and bytes from Apache logs.",
         hint: 'Match literals [ ] and " exactly, then bind the matchers.',
         sampleData: generateApacheLogs(2000, 109),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: 'IPADDR:ip [WORD:ts] "ALPHA:method WORD:path INTEGER:status INTEGER:bytes"' }, raw: 'parse content, "IPADDR:ip [WORD:ts] \"ALPHA:method WORD:path INTEGER:status INTEGER:bytes\""' },
+          { id: "e2", command: "parse", args: { field: "content", pattern: 'IPADDR:ip [WORD:ts] "ALPHA:method WORD:path INTEGER:status INTEGER:bytes"' }, raw: 'parse content, "IPADDR:ip [WORD:ts] "ALPHA:method WORD:path INTEGER:status INTEGER:bytes""' },
         ],
       },
     ],
@@ -437,13 +437,13 @@ export const dplScenarios: Scenario[] = [
         title: "Parse the full line",
         narration:
           "Build a pattern that extracts IPADDR, TIMESTAMP, ALPHA method, WORD path, INTEGER status, INTEGER bytes, and the rest as LD for the user agent. Include literals for brackets and quotes.",
-        lesson: 'parse content, "IPADDR:ip [TIMESTAMP:ts] \"ALPHA:method WORD:path HTTP/1.1\" INTEGER:status INTEGER:bytes LD:ua"',
+        lesson: 'parse content, "IPADDR:ip [TIMESTAMP:ts] "ALPHA:method WORD:path HTTP/1.1" INTEGER:status INTEGER:bytes LD:ua"',
         goal: "Extract ip, ts, method, path, status, bytes, and ua from nginx lines.",
         hint: 'Match literals [ ] and "HTTP/1.1" exactly. Use LD for the trailing user agent.',
         sampleData: generateNginxLogs(2000, 112),
         expectedPipeline: [
           { id: "e1", command: "fetch", args: { source: "logs" }, raw: "fetch logs" },
-          { id: "e2", command: "parse", args: { field: "content", pattern: 'IPADDR:ip [TIMESTAMP:ts] "ALPHA:method WORD:path HTTP/1.1" INTEGER:status INTEGER:bytes LD:ua' }, raw: 'parse content, "IPADDR:ip [TIMESTAMP:ts] \"ALPHA:method WORD:path HTTP/1.1\" INTEGER:status INTEGER:bytes LD:ua"' },
+          { id: "e2", command: "parse", args: { field: "content", pattern: 'IPADDR:ip [TIMESTAMP:ts] "ALPHA:method WORD:path HTTP/1.1" INTEGER:status INTEGER:bytes LD:ua' }, raw: 'parse content, "IPADDR:ip [TIMESTAMP:ts] "ALPHA:method WORD:path HTTP/1.1" INTEGER:status INTEGER:bytes LD:ua"' },
         ],
       },
     ],

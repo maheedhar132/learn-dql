@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Modal } from "@dynatrace/strato-components/overlays";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { Paragraph, Strong } from "@dynatrace/strato-components/typography";
+import { Paragraph } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Select, TextInput, Label } from "@dynatrace/strato-components/forms";
+import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { PlusIcon } from "@dynatrace/strato-icons";
 import { documentsClient } from "@dynatrace-sdk/client-document";
 import { openDocument } from "@dynatrace-sdk/navigation";
@@ -73,7 +73,7 @@ export const AddToNotebookModal = ({
   useEffect(() => {
     if (isOpen) {
       reset();
-      loadNotebooks();
+      void loadNotebooks();
     }
   }, [isOpen, reset, loadNotebooks]);
 
@@ -153,7 +153,7 @@ export const AddToNotebookModal = ({
             placeholder="Notebook name"
             style={{ minWidth: 200 }}
           />
-          <Button variant="accent" onClick={handleCreateNew} disabled={isBusy}>
+          <Button variant="accent" onClick={() => { void handleCreateNew(); }} disabled={isBusy}>
             {status === "creating" ? "Creating…" : "Create"}
           </Button>
           <Button variant="default" onClick={() => setShowNameInput(false)} disabled={isBusy}>
@@ -169,7 +169,7 @@ export const AddToNotebookModal = ({
         </Button>
         <Button
           variant="accent"
-          onClick={handleConfirm}
+          onClick={() => { void handleConfirm(); }}
           disabled={!hasSelection || isBusy}
         >
           {status === "submitting" ? "Adding…" : "Confirm"}

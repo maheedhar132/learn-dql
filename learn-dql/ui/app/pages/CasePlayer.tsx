@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link as RouterLink, useNavigate } from "react-router-dom";
-import { Flex, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
+import { Flex, Surface, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Heading,
   Paragraph,

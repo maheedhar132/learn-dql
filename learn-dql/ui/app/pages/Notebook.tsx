@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Flex, Surface, Divider, TitleBar } from "@dynatrace/strato-components/layouts";
 import {
   Paragraph,
@@ -813,7 +813,7 @@ export const Notebook = () => {
             ) : (
               <QueryCellComponent
                 cell={cell}
-                onUpdate={updateCell as (id: string, patch: Partial<QueryCell>) => void}
+                onUpdate={updateCell}
                 onDelete={deleteCell}
                 onMoveUp={(id) => moveCell(id, "up")}
                 onMoveDown={(id) => moveCell(id, "down")}

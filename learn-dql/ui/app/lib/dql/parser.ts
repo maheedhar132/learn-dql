@@ -95,7 +95,8 @@ function parseCommand(raw: string): { name: DQLCommandName; args: Record<string,
       const aggs: Array<{ alias: string; aggregation: string; aggField: string; condition?: string }> = [];
       let m;
       while ((m = aggPattern.exec(aggPart)) !== null) {
-        aggs.push({ alias: m[1], aggregation: m[2].toLowerCase(), aggField: m[3].trim() });
+        const [, mAlias, mAggregation, mAggField] = m as [string, string, string, string];
+        aggs.push({ alias: mAlias, aggregation: mAggregation.toLowerCase(), aggField: mAggField.trim() });
       }
       // Bare count() with no alias
       if (aggs.length === 0) {

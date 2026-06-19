@@ -1,5 +1,12 @@
 import type { DQLRecord, DQLColumn } from "../types/dql";
 
+function str(v: unknown, fallback = ""): string {
+  if (v == null) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try { return JSON.stringify(v); } catch { return fallback; }
+}
+
 export function executeCommand(
   command: string,
   data: DQLRecord[],
@@ -54,14 +61,14 @@ export function executeCommand(
 }
 
 function execData(args: Record<string, unknown>): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const raw = String(args.raw || "[]");
+  const raw = str(args.raw, "[]");
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     const records = Array.isArray(parsed) ? parsed : [parsed];
     const keys = new Set<string>();
     for (const r of records) {
       if (r && typeof r === "object") {
-        Object.keys(r).forEach((k) => keys.add(k));
+        Object.keys(r as Record<string, unknown>).forEach((k) => keys.add(k));
       }
     }
     const cols = Array.from(keys).map((name) => ({ name, type: "string" }));
@@ -72,12 +79,12 @@ function execData(args: Record<string, unknown>): { data: DQLRecord[]; columns: 
 }
 
 function execFilter(data: DQLRecord[], args: Record<string, unknown>): DQLRecord[] {
-  const condition = String(args.condition || "");
+  const condition = str(args.condition);
   return data.filter((row) => evaluateCondition(condition, row));
 }
 
 function execFilterOut(data: DQLRecord[], args: Record<string, unknown>): DQLRecord[] {
-  const condition = String(args.condition || "");
+  const condition = str(args.condition);
   return data.filter((row) => !evaluateCondition(condition, row));
 }
 
@@ -85,7 +92,7 @@ function execFieldsKeep(
   data: DQLRecord[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const fieldList = String(args.fields || "").split(",").map((f) => f.trim()).filter(Boolean);
+  const fieldList = str(args.fields).split(",").map((f) => f.trim()).filter(Boolean);
   const out = data.map((row) => {
     const obj: DQLRecord = {};
     for (const f of fieldList) {
@@ -102,7 +109,7 @@ function execFieldsAdd(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const assignments = String(args.assignments || "");
+  const assignments = str(args.assignments);
   const pairs = parseAssignments(assignments);
   const out = data.map((row) => {
     const clone = { ...row };
@@ -120,7 +127,7 @@ function execFieldsRemove(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const fieldList = String(args.fields || "").split(",").map((f) => f.trim()).filter(Boolean);
+  const fieldList = str(args.fields).split(",").map((f) => f.trim()).filter(Boolean);
   const out = data.map((row) => {
     const clone = { ...row };
     for (const f of fieldList) delete clone[f];
@@ -136,7 +143,7 @@ function execFieldsRename(
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
   // DQL semantics: fieldsRename newName = oldName
-  const pairs = parseAssignments(String(args.assignments || ""));
+  const pairs = parseAssignments(str(args.assignments));
   const out = data.map((row) => {
     const clone = { ...row };
     for (const [newName, oldNameExpr] of pairs) {
@@ -160,8 +167,8 @@ function execSort(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const field = String(args.field || "timestamp");
-  const direction = String(args.direction || "asc");
+  const field = str(args.field, "timestamp");
+  const direction = str(args.direction, "asc");
   const sorted = [...data].sort((a, b) => {
     const av = a[field];
     const bv = b[field];
@@ -172,8 +179,8 @@ function execSort(
       return direction === "asc" ? av - bv : bv - av;
     }
     return direction === "asc"
-      ? String(av).localeCompare(String(bv))
-      : String(bv).localeCompare(String(av));
+      ? str(av).localeCompare(str(bv))
+      : str(bv).localeCompare(str(av));
   });
   return { data: sorted, columns };
 }
@@ -217,12 +224,12 @@ function execSummarize(
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
   // Support multiple aggs from args.aggs: [{alias, aggregation, aggField, condition}]
   // or fall back to single agg pattern
-  const byFields = String(args.by || "").split(",").map((f) => f.trim()).filter(Boolean);
+  const byFields = str(args.by).split(",").map((f) => f.trim()).filter(Boolean);
   const aggs: Array<{ alias: string; aggregation: string; aggField: string; condition?: string }> =
     (args.aggs as typeof aggs) ?? [{
-      alias: String(args.alias || "count"),
-      aggregation: String(args.aggregation || "count"),
-      aggField: String(args.aggField || ""),
+      alias: str(args.alias, "count"),
+      aggregation: str(args.aggregation, "count"),
+      aggField: str(args.aggField),
       condition: args.condition as string | undefined,
     }];
 
@@ -239,7 +246,7 @@ function execSummarize(
 
   const groups = new Map<string, DQLRecord[]>();
   for (const row of data) {
-    const key = byFields.map((f) => String(row[f] ?? "null")).join("||");
+    const key = byFields.map((f) => str(row[f], "null")).join("||");
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(row);
   }
@@ -266,7 +273,7 @@ function execDedup(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const field = String(args.field || "");
+  const field = str(args.field);
   if (!field) return { data, columns };
   const seen = new Set<unknown>();
   const out = data.filter((row) => {
@@ -283,7 +290,7 @@ function execSearch(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const term = String(args.term || "").toLowerCase();
+  const term = str(args.term).toLowerCase();
   if (!term) return { data, columns };
   return {
     data: data.filter((row) =>
@@ -382,8 +389,8 @@ function execParse(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const field = String(args.field || "content");
-  const pattern = String(args.pattern || "");
+  const field = str(args.field, "content");
+  const pattern = str(args.pattern);
   if (!pattern) return { data, columns };
 
   const newCols = [...columns];
@@ -399,7 +406,7 @@ function execParse(
   const jsonMatch = pattern.match(/^JSON:([A-Za-z_][A-Za-z0-9_]*)$/);
   if (jsonMatch) {
     const out = data.map((row) => {
-      const content = String(row[field] || "");
+      const content = str(row[field]);
       try {
         const parsed: unknown = JSON.parse(content);
         if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -421,7 +428,7 @@ function execParse(
   if (isKvpExplicit || isKvpImplicit) {
     const out = data.map((row) => {
       const clone = { ...row };
-      const content = String(row[field] || "");
+      const content = str(row[field]);
       for (const token of content.split(/\s+/)) {
         const eqIdx = token.indexOf("=");
         if (eqIdx > 0) {
@@ -445,7 +452,7 @@ function execParse(
 
     const out = data.map((row) => {
       const clone = { ...row };
-      const content = String(row[field] || "");
+      const content = str(row[field]);
       const m = regex.exec(content);
       if (m) {
         captures.forEach((cap, i) => {
@@ -470,7 +477,7 @@ function execParse(
   // ── 1d. Fallback: original key=value extraction via type:name tokens ─────
   const out = data.map((row) => {
     const clone = { ...row };
-    const content = String(row[field] || "");
+    const content = str(row[field]);
     const matches = pattern.match(/([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)/g);
     if (matches) {
       for (const mtch of matches) {
@@ -499,10 +506,10 @@ function execLookup(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const sourceField = String(args.sourceField || "");
-  const lookupField = String(args.lookupField || "");
-  const prefix = String(args.prefix || "lookup.");
-  const rightRecords = (args.records as DQLRecord[]) || [];
+  const sourceField = str(args.sourceField);
+  const lookupField = str(args.lookupField);
+  const prefix = str(args.prefix, "lookup.");
+  const rightRecords = Array.isArray(args.records) ? (args.records as DQLRecord[]) : [];
   const fieldFilter = Array.isArray(args.fields) ? (args.fields as string[]) : null;
 
   if (!sourceField || !lookupField || rightRecords.length === 0) {
@@ -555,14 +562,14 @@ function execExpand(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const field = String(args.field || "");
+  const field = str(args.field);
   if (!field) return { data, columns };
   const out: DQLRecord[] = [];
   for (const row of data) {
     const arr = row[field];
     if (Array.isArray(arr)) {
       for (const item of arr) {
-        out.push({ ...row, [field]: item });
+        out.push({ ...row, [field]: item as unknown });
       }
     } else {
       out.push(row);
@@ -576,7 +583,7 @@ function execAppend(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const records = (args.records as DQLRecord[]) || [];
+  const records = Array.isArray(args.records) ? (args.records as DQLRecord[]) : [];
   const allKeys = new Set<string>();
   for (const row of data) Object.keys(row).forEach((k) => allKeys.add(k));
   for (const row of records) Object.keys(row).forEach((k) => allKeys.add(k));
@@ -592,12 +599,12 @@ function execMakeTimeseries(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const intervalStr = String(args.interval || "1h");
-  const byField = String(args.by || "").trim();
-  const aggregation = String(args.aggregation || "count");
-  const aggField = String(args.aggField || "");
-  const alias = String(args.alias || aggregation);
-  const timeField = String(args.time || "timestamp");
+  const intervalStr = str(args.interval, "1h");
+  const byField = str(args.by).trim();
+  const aggregation = str(args.aggregation, "count");
+  const aggField = str(args.aggField);
+  const alias = str(args.alias, aggregation);
+  const timeField = str(args.time, "timestamp");
 
   const intervalMs = parseInterval(intervalStr);
   if (!intervalMs || data.length === 0) return { data: [], columns: [] };
@@ -612,7 +619,7 @@ function execMakeTimeseries(
     if (!ts) continue;
 
     const bucketTime = Math.floor(ts.getTime() / intervalMs) * intervalMs;
-    const groupKey = byField ? String(row[byField] ?? "null") : "_all";
+    const groupKey = byField ? str(row[byField], "null") : "_all";
     const key = `${bucketTime}::${groupKey}`;
 
     if (!buckets.has(key)) {
@@ -714,7 +721,7 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
     }
 
     const args = splitArgs(rawArgs).map((a) => evaluateExpression(a, row));
-    const s0 = String(args[0] ?? "");
+    const s0 = str(args[0]);
     const n0 = Number(args[0] ?? 0);
 
     switch (fn) {
@@ -724,15 +731,15 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
       case "trim":           return s0.trim();
       case "stringlength":
       case "len":            return s0.length;
-      case "concat":         return args.map((a) => String(a ?? "")).join("");
+      case "concat":         return args.map((a) => str(a)).join("");
       case "substring": {
         const start = Number(args[1] ?? 0);
         const len   = args[2] !== undefined ? Number(args[2]) : undefined;
         return len !== undefined ? s0.substring(start, start + len) : s0.substring(start);
       }
-      case "replacestring": return s0.split(String(args[1] ?? "")).join(String(args[2] ?? ""));
-      case "indexof":       return s0.indexOf(String(args[1] ?? ""));
-      case "splitstring":   return s0.split(String(args[1] ?? ","));
+      case "replacestring": return s0.split(str(args[1])).join(str(args[2]));
+      case "indexof":       return s0.indexOf(str(args[1]));
+      case "splitstring":   return s0.split(str(args[1], ","));
       // Type conversion
       case "tolong":
       case "toint":
@@ -772,7 +779,7 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
       }
       // Arrays
       case "arraycontains": {
-        return Array.isArray(args[0]) && (args[0] as unknown[]).map(String).includes(String(args[1] ?? ""));
+        return Array.isArray(args[0]) && (args[0] as unknown[]).map((v) => str(v)).includes(str(args[1]));
       }
       case "arraysize": {
         return Array.isArray(args[0]) ? (args[0] as unknown[]).length : 0;
@@ -785,7 +792,7 @@ function evaluateExpression(expr: string, row: DQLRecord): unknown {
   if (!isNaN(Number(clean)) && clean !== "") return Number(clean);
 
   // Arithmetic (simple, after function check)
-  const arithMatch = clean.match(/^(.+?)\s*([+\-*\/])\s*(.+)$/);
+  const arithMatch = clean.match(/^(.+?)\s*([+\-*/])\s*(.+)$/);
   if (arithMatch) {
     const l = Number(resolveValue(arithMatch[1].trim(), row));
     const r = Number(resolveValue(arithMatch[3].trim(), row));
@@ -867,22 +874,22 @@ export function evaluateCondition(condition: string, row: DQLRecord): boolean {
       return t;
     });
     const field = splitArgs(rawArgs)[0].trim();
-    const fv = String(row[field] ?? "").toLowerCase();
-    const v  = String(args[1] ?? "").toLowerCase();
+    const fv = str(row[field]).toLowerCase();
+    const v  = str(args[1]).toLowerCase();
     switch (fn) {
       case "contains":   return fv.includes(v);
       case "startswith": return fv.startsWith(v);
       case "endswith":   return fv.endsWith(v);
-      case "like":       return new RegExp("^" + v.replace(/%/g, ".*").replace(/_/g, ".") + "$", "i").test(String(row[field] ?? ""));
+      case "like":       return new RegExp("^" + v.replace(/%/g, ".*").replace(/_/g, ".") + "$", "i").test(str(row[field]));
       case "isnull":     return row[field] == null;
       case "isnotnull":  return row[field] != null;
       case "in": {
         const rest = rawArgs.slice(rawArgs.indexOf(",") + 1).trim();
-        return parseInList(rest).includes(String(row[field] ?? ""));
+        return parseInList(rest).includes(str(row[field]));
       }
       case "arraycontains": {
         const arr = row[field];
-        return Array.isArray(arr) && arr.map(String).includes(String(args[1] ?? ""));
+        return Array.isArray(arr) && arr.map((v) => str(v)).includes(str(args[1]));
       }
     }
   }
@@ -944,9 +951,9 @@ function execJoin(
   columns: DQLColumn[],
   args: Record<string, unknown>
 ): { data: DQLRecord[]; columns: DQLColumn[] } {
-  const kind = String(args.kind || "inner").toLowerCase();
-  const onField = String(args.on || "");
-  const rightRecords = (args.records as DQLRecord[]) || [];
+  const kind = str(args.kind, "inner").toLowerCase();
+  const onField = str(args.on);
+  const rightRecords = Array.isArray(args.records) ? (args.records as DQLRecord[]) : [];
 
   if (!onField) return { data, columns };
 

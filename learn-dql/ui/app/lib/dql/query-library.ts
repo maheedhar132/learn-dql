@@ -56,6 +56,7 @@ export const QUERY_LIBRARY: QueryEntry[] = [
 | fields timestamp, host, duration_ms, content
 | sort duration_ms desc
 | limit 20`,
+    // eslint-disable-next-line noSecrets/no-secrets
     explanation: "The sandbox Database Logs dataset exposes `duration_ms` as a top-level long field, so no parse step is needed here. On a live tenant where duration is buried in the log body, you would add `| parse content, \"LD DURATION:query_time\"` to extract a typed duration value (the DURATION matcher handles units like ms, s, etc. automatically) before filtering.",
     xpReward: 10,
   },

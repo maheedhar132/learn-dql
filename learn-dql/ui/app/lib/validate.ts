@@ -42,13 +42,13 @@ function seedSubqueryRecords(pipeline: PipelineStage[], reference?: PipelineStag
   const SEEDABLE = new Set(["lookup", "join", "append"]);
   for (const stage of pipeline) {
     if (!SEEDABLE.has(stage.command)) continue;
-    const args = stage.args as Record<string, unknown>;
+    const args = stage.args;
     if (args.records) continue;
     const ref = reference.find(
-      (r) => r.command === stage.command && (r.args as Record<string, unknown>).records,
+      (r) => r.command === stage.command && r.args.records,
     );
     if (ref) {
-      stage.args = { ...args, records: (ref.args as Record<string, unknown>).records };
+      stage.args = { ...args, records: ref.args.records };
     }
   }
 }
@@ -121,7 +121,6 @@ export interface ValidationResult {
 }
 
 function diagnoseFailure(query: string, userCount: number, expectedCount: number): string {
-  const q = query.toLowerCase();
   if (/filter\s+\w[\w.]*\s*=[^=]/.test(query)) return "Check your comparison operator — DQL uses == not =.";
   if (/filter\s+\w[\w.]*\s*==\s*[^"'\d()\s]/.test(query)) return "String values need double quotes, e.g. == \"ERROR\".";
   if (userCount === 0 && expectedCount > 0) return "Your query returned no records — check your filter conditions and field names.";

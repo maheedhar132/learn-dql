@@ -1,16 +1,14 @@
 import React, { useMemo } from "react";
-import { DataTable, TableActionsMenu, DataTablePagination } from "@dynatrace/strato-components/tables";
+import { DataTable, TableActionsMenu } from "@dynatrace/strato-components/tables";
 import { EmptyState } from "@dynatrace/strato-components/content";
 import { Chip } from "@dynatrace/strato-components/content";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import {
-  CopyIcon,
   ArrowSmallUpIcon,
   ArrowSmallDownIcon,
   GroupIcon,
   FilterForIcon,
   FilterOutIcon,
-  ViewOffIcon,
 } from "@dynatrace/strato-icons";
 import type { DQLRecord, DQLColumn } from "../lib/types/dql";
 
@@ -37,7 +35,7 @@ function display(value: unknown): string {
     return value;
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try { return JSON.stringify(value); } catch { return String(value); }
+  try { return JSON.stringify(value); } catch { return "[object]"; }
 }
 
 function colTypeLabel(col: DQLColumn, records: DQLRecord[]): string {
@@ -52,13 +50,13 @@ function colTypeLabel(col: DQLColumn, records: DQLRecord[]): string {
 function filterExpr(value: unknown): string {
   if (value === null || value === undefined) return "== null";
   if (typeof value === "string") return `== "${value}"`;
-  return `== ${String(value)}`;
+  return `== ${display(value)}`;
 }
 
 function filterNeqExpr(value: unknown): string {
   if (value === null || value === undefined) return "!= null";
   if (typeof value === "string") return `!= "${value}"`;
-  return `!= ${String(value)}`;
+  return `!= ${display(value)}`;
 }
 
 export const ResultTable = ({
@@ -72,6 +70,7 @@ export const ResultTable = ({
 
   // Add row-number synthetic field for the # column.
   const numberedData = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     () => sliced.map((r, i) => ({ ...r, _row: i + 1 } as DQLRecord)),
     [sliced],
   );
@@ -95,7 +94,7 @@ export const ResultTable = ({
       // Data columns — header rendered as "name\ntype" via custom header
       ...columns.map((c) => ({
         id: c.name,
-        accessor: c.name as keyof DQLRecord,
+        accessor: c.name,
         header: () => (
           <Flex flexDirection="column" gap={2}>
             <span style={{ fontFamily: "var(--dt-font-mono, monospace)", fontWeight: 600, fontSize: "0.8125rem" }}>
@@ -209,13 +208,13 @@ export const ResultTable = ({
                   onSelect={() => onQueryModify("filter", columnDef.id, filterExpr(cellValue))}
                 >
                   <TableActionsMenu.Prefix><FilterForIcon /></TableActionsMenu.Prefix>
-                  Filter for: {String(cellValue).slice(0, 30)}
+                  Filter for: {display(cellValue).slice(0, 30)}
                 </TableActionsMenu.Item>
                 <TableActionsMenu.Item
                   onSelect={() => onQueryModify("filter", columnDef.id, filterNeqExpr(cellValue))}
                 >
                   <TableActionsMenu.Prefix><FilterOutIcon /></TableActionsMenu.Prefix>
-                  Exclude: {String(cellValue).slice(0, 30)}
+                  Exclude: {display(cellValue).slice(0, 30)}
                 </TableActionsMenu.Item>
               </>
             )}

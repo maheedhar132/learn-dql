@@ -1,5 +1,4 @@
 import type { DQLRecord } from "../types/dql";
-import type { PipelineStage } from "../types/dql";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +59,6 @@ function generateSantaWarehouseLogs(): DQLRecord[] {
   const elves = ["Hermey", "Bushy", "Pepper", "Shinny", "Wunorse", "Alabaster", "Jingle", "Sugarplum"];
   const giftIds = Array.from({ length: 60 }, (_, i) => `GIFT-${String(i + 1).padStart(4, "0")}`);
   // Hermey is the culprit — many entries, few exits
-  const suspects = ["Hermey", "Hermey", "Hermey", "Hermey", "Hermey", "Bushy", "Bushy", "Pepper"];
 
   const records: DQLRecord[] = [];
   let elapsed = 0;
@@ -147,10 +145,15 @@ function generateRiddlerLogs(): DQLRecord[] {
 
   // Riddle messages encoded as base64-ish strings hidden in a custom header field
   const riddles = [
+    // eslint-disable-next-line noSecrets/no-secrets
     { encoded: "UklERExFUjogSSBhbSB0aGUgcXVlc3Rpb24gbWFya.", decoded: "RIDDLER: I am the question mark." },
+    // eslint-disable-next-line noSecrets/no-secrets
     { encoded: "UklEREwzUjogQ2hhb3MgaXMgYSBsYWRkZXIu",      decoded: "RIDDL3R: Chaos is a ladder." },
+    // eslint-disable-next-line noSecrets/no-secrets
     { encoded: "UklEREwzUjogTm8gcXVlc3Rpb24gdW5hc2tlZC4=",  decoded: "RIDDL3R: No question unasked." },
+    // eslint-disable-next-line noSecrets/no-secrets
     { encoded: "UklEREwzUjogVGhlIG5ldHdvcmsgaXMgbWluZS4=",  decoded: "RIDDL3R: The network is mine." },
+    // eslint-disable-next-line noSecrets/no-secrets
     { encoded: "UklEREwzUjogWW91IHdpbGwgbm90IHNvbHZlIG1lLg==", decoded: "RIDDL3R: You will not solve me." },
   ];
 
@@ -1353,6 +1356,7 @@ function generateStaleTokenLogs(): DQLRecord[] {
       action: "TOKEN_ISSUED",
       client_app,
       issued_at,
+      // eslint-disable-next-line noSecrets/no-secrets
       content: `token=${token_id} user=${user_id} action=TOKEN_ISSUED app=${client_app}`,
     });
     elapsed += randInt(rng, 600, 3600);
@@ -1364,6 +1368,7 @@ function generateStaleTokenLogs(): DQLRecord[] {
       action: "TOKEN_EXPIRED",
       client_app,
       issued_at,
+      // eslint-disable-next-line noSecrets/no-secrets
       content: `token=${token_id} user=${user_id} action=TOKEN_EXPIRED`,
     });
   }
@@ -1378,6 +1383,7 @@ function generateStaleTokenLogs(): DQLRecord[] {
     action: "TOKEN_ISSUED",
     client_app: "data-tool",
     issued_at: eternalIssuedAt,
+    // eslint-disable-next-line noSecrets/no-secrets
     content: "token=tok-eternal-999 user=phantom_svc action=TOKEN_ISSUED app=data-tool",
   });
   for (let i = 0; i < 14; i++) {

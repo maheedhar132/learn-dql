@@ -6,12 +6,12 @@ import { SettingIcon } from "@dynatrace/strato-icons";
 export const Header = () => {
   return (
     <AppHeader>
-      <AppHeader.NavItems>
-        <AppHeader.AppNavLink as={Link} to="/" />
-        <AppHeader.NavItem as={Link} to="/sandbox">
+      <AppHeader.Navigation>
+        <AppHeader.Logo as={Link} to="/" />
+        <AppHeader.NavigationItem as={Link} to="/sandbox">
           Sandbox
-        </AppHeader.NavItem>
-      </AppHeader.NavItems>
+        </AppHeader.NavigationItem>
+      </AppHeader.Navigation>
       <AppHeader.ActionItems>
         <AppHeader.ActionButton as={Link} to="/settings" prefixIcon={<SettingIcon />}>
           Settings

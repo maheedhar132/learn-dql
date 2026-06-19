@@ -40,7 +40,7 @@ function QuerySandbox({
 
   function run() {
     if (!query.trim()) return;
-    setOutcome(runQuery(query, sampleData as Parameters<typeof runQuery>[1]));
+    setOutcome(runQuery(query, sampleData));
     onRun?.();
   }
 
@@ -48,7 +48,7 @@ function QuerySandbox({
 
   function applyModify(newQ: string) {
     setQuery(newQ);
-    setOutcome(runQuery(newQ, sampleData as Parameters<typeof runQuery>[1]));
+    setOutcome(runQuery(newQ, sampleData));
   }
 
   return (

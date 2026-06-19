@@ -36,7 +36,7 @@ export function generateAuthLogs(count: number, seed: number): DQLRecord[] {
     "ivan", "judy", "admin", "root", "guest", "support", "ops", "dev",
     "testuser", "api-client", "service-account", "backup",
   ];
-  const ips = Array.from({ length: 80 }, (_, i) => {
+  const ips = Array.from({ length: 80 }, () => {
     const a = randInt(rng, 10, 223);
     const b = randInt(rng, 0, 255);
     const c = randInt(rng, 0, 255);
@@ -145,6 +145,7 @@ export function generateDbLogs(count: number, seed: number): DQLRecord[] {
     } else if (level === "WARN") {
       content = `tx_id=${txId} query_type=${queryType} duration_ms=${duration_ms} warning="Slow query detected, consider indexing"`;
     } else if (level === "DEBUG") {
+      // eslint-disable-next-line noSecrets/no-secrets
       content = `tx_id=${txId} query_type=${queryType} rows_examined=5234 rows_sent=128`;
     } else {
       content = `tx_id=${txId} query_type=${queryType} duration_ms=${duration_ms} rows_affected=42 status="success"`;
@@ -495,7 +496,7 @@ export function generateAppLogs(count: number, seed: number): DQLRecord[] {
 export function generateNginxLogs(count: number, seed: number): DQLRecord[] {
   const rng = seededRandom(seed);
   const baseTime = new Date("2024-01-15T08:00:00Z");
-  const ips = Array.from({ length: 50 }, (_, i) => {
+  const ips = Array.from({ length: 50 }, () => {
     const a = randInt(rng, 10, 223);
     const b = randInt(rng, 0, 255);
     const c = randInt(rng, 0, 255);
@@ -579,8 +580,8 @@ export function generateFirewallLogs(count: number, seed: number): DQLRecord[] {
   const baseTime = new Date("2024-01-15T08:00:00Z");
   const actions = ["ALLOW", "DENY", "DROP"];
   const protocols = ["TCP", "UDP", "ICMP"];
-  const srcIps = Array.from({ length: 30 }, (_, i) => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
-  const dstIps = Array.from({ length: 20 }, (_, i) => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
+  const srcIps = Array.from({ length: 30 }, () => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
+  const dstIps = Array.from({ length: 20 }, () => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
 
   const records: DQLRecord[] = [];
   let elapsed = 0;
@@ -637,7 +638,7 @@ export function generateJsonLogs(count: number, seed: number): DQLRecord[] {
 export function generateApacheLogs(count: number, seed: number): DQLRecord[] {
   const rng = seededRandom(seed);
   const baseTime = new Date("2024-01-15T08:00:00Z");
-  const ips = Array.from({ length: 40 }, (_, i) => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
+  const ips = Array.from({ length: 40 }, () => `${randInt(rng, 10, 223)}.${randInt(rng, 0, 255)}.${randInt(rng, 0, 255)}.${randInt(rng, 1, 254)}`);
   const methods = ["GET", "POST", "HEAD"];
   const paths = ["/index.html", "/api/data", "/static/style.css", "/login", "/admin", "/health", "/metrics"];
   const codes = [200, 301, 404, 500, 403];
@@ -749,7 +750,7 @@ export function generateApiGatewayLogs(count: number, seed: number): DQLRecord[]
   const rng = seededRandom(seed);
   const baseTime = new Date("2024-01-15T08:00:00Z");
   const apis = ["/v1/users", "/v1/orders", "/v1/payments", "/v1/inventory", "/v1/reports", "/v1/search", "/v1/webhooks"];
-  const keys = Array.from({ length: 20 }, (_, i) => `key_${randInt(rng, 1000, 9999)}`);
+  const keys = Array.from({ length: 20 }, () => `key_${randInt(rng, 1000, 9999)}`);
   const methods = ["GET", "POST", "PUT", "DELETE"];
 
   const records: DQLRecord[] = [];
@@ -780,7 +781,6 @@ export function generateKubernetesStructuredLogs(count: number, seed: number): D
   const rng = seededRandom(seed);
   const base = new Date("2024-03-10T06:00:00Z");
 
-  const namespaces = ["production", "staging", "monitoring", "data-pipeline", "ingress-nginx", "kube-system"];
   const deployments = [
     { name: "api-gateway", namespace: "production" },
     { name: "user-service", namespace: "production" },
@@ -796,9 +796,6 @@ export function generateKubernetesStructuredLogs(count: number, seed: number): D
     { name: "coredns", namespace: "kube-system" },
   ];
   const nodes = ["node-01", "node-02", "node-03", "node-04", "node-05"];
-  const reasons = ["OOMKilling", "CrashLoopBackOff", "ImagePullBackOff", "Evicted", "Scheduled",
-                   "Pulled", "Started", "Killing", "BackOff", "FailedMount", "NodeNotReady"];
-  const phases = ["Running", "Running", "Running", "Running", "Pending", "Failed", "Succeeded", "CrashLoopBackOff"];
 
   const records: DQLRecord[] = [];
   let elapsed = 0;
